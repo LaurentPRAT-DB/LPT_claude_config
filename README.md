@@ -17,7 +17,7 @@ Personal Claude Code configuration files for Laurent Prat.
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/LaurentPRAT-DB/LPT_claude_config.git ~/.claude
+   git clone https://github.com/LaurentPrat/LPT_claude_config.git ~/.claude
    ```
 
 2. **Create settings from templates:**
