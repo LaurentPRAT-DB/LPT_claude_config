@@ -1,0 +1,55 @@
+# Secrets - use .template versions instead
+settings.json
+settings.json.backup
+mcp.json
+
+# Session and conversation data
+history.jsonl
+*.jsonl
+
+# Project session data (keep only memory/ folders)
+projects/*/
+!projects/-Users-laurent-prat/
+projects/-Users-laurent-prat/*
+!projects/-Users-laurent-prat/memory/
+
+# Machine-specific settings
+settings.local.json
+
+# Plugin cache (reinstallable)
+plugins/cache/
+plugins/installed_plugins.json
+plugins/blocklist.json
+plugins/known_marketplaces.json
+plugins/marketplaces/
+
+# Temporary and cache files
+cache/
+debug/
+file-history/
+paste-cache/
+session-env/
+shell-snapshots/
+image-cache/
+backups/
+plans/
+ide/
+
+# State files (not portable)
+statsig/
+tasks/
+teams/
+telemetry/
+todos/
+stats-cache.json
+
+# GSD state files
+gsd-file-manifest.json
+get-shit-done/
+
+# Package lock files
+package-lock.json
+node_modules/
+
+# OS files
+.DS_Store

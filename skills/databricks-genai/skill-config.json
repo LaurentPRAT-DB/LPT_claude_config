@@ -1,0 +1,6 @@
+{
+  "name": "databricks-genai",
+  "description": "Specialized skill for Databricks Generative AI and LLM applications including Foundation Model APIs, Vector Search, RAG patterns, AI Gateway, model serving, fine-tuning, and agentic workflows.",
+  "version": "1.0.0",
+  "userInvocable": true
+}
