@@ -14,6 +14,43 @@ Quick reference:
 1. Get accounts: `SELECT Id FROM Account WHERE Last_SA_Engaged__c = '0058Y00000C0P5ZQAV'`
 2. Get UCOs: `SELECT ... FROM UseCase__c WHERE Account__c IN (<account_ids>)`
 
+## UCO Next Steps Updates - CRITICAL RULES
+
+### 4-Line Template Format (MUST USE)
+```
+[Mon-DD] - [LP] - Status: [On track / At risk / On Hold]
+Last: [What happened]
+Next: [What's the next step]
+Risk: [Any risks, or "None"]
+```
+
+### NEVER Remove History
+1. **Always query existing content first** before updating
+2. **Prepend new entry** at top, keeping ALL previous entries below
+3. **Never overwrite** - always preserve full history
+
+### Update Workflow
+```bash
+# Step 1: Query existing content
+sf data query --query "SELECT Demand_Plan_Next_Steps__c FROM UseCase__c WHERE Id = 'ID'" --json
+
+# Step 2: Update with NEW entry + ALL existing entries
+sf data update record --sobject UseCase__c --record-id ID \
+  --values "Demand_Plan_Next_Steps__c='Feb-26 - LP - Status: On track
+Last: [what happened]
+Next: [next action]
+Risk: None
+
+[PASTE ALL EXISTING ENTRIES HERE]'"
+```
+
+### Common Mistakes to Avoid
+- Do NOT use inline single-line format - always use 4-line template
+- Do NOT truncate history to save space
+- Do NOT forget initials (LP) after the date
+
+See detailed patterns: [uco-next-steps-patterns.md](./uco-next-steps-patterns.md)
+
 ## UCO Onboarding Documentation
 - **U5 UCOs require onboarding docs** - Template: [uco-onboarding-template.md](./uco-onboarding-template.md)
 - Docs must be owned by laurent.prat@databricks.com and shared with databricks.com domain as VIEWER
@@ -36,6 +73,16 @@ Quick reference:
 ## Environment
 - Salesforce CLI: `/opt/homebrew/bin/sf` (installed via Homebrew)
 - Default org: `laurent.prat@databricks.com`
+
+## Installation & Setup Patterns
+See detailed guide: [installation-patterns.md](./installation-patterns.md)
+
+**Key points:**
+- FE Vibe plugins require Databricks GitHub EMU access (not public)
+- **WRONG:** `/install-plugin fe-vibe` - this does NOT work
+- **CORRECT:** Use vibe installer from `databricks-field-eng/vibe` repo
+- Homebrew casks: `gcloud-cli`, `claude-code` (use `--cask` flag)
+- Homebrew formula: `sf` (no flag needed)
 
 ## Google Workspace Tools
 

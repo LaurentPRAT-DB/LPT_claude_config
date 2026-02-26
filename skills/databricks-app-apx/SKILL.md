@@ -150,24 +150,51 @@ In `src/{app_name}/ui/routes/_sidebar/route.tsx`, add new item to `navItems` arr
 
 ## Phase 4: Testing
 
+### Automated Testing with MCP Servers
+
+Use Chrome DevTools MCP for automated UI testing:
+
 ```bash
 # Type check both backend and frontend
-mcp-cli call apx/dev_check '{}'
+mcp__apx__dev_check
 
+# Navigate browser to app
+mcp__chrome-devtools__puppeteer_navigate --url "http://localhost:5173"
+
+# Take screenshot for visual verification
+mcp__chrome-devtools__puppeteer_screenshot
+
+# Check for console errors
+mcp__chrome-devtools__puppeteer_console_logs
+
+# Test navigation clicks
+mcp__chrome-devtools__puppeteer_click --selector "[data-testid='nav-item']"
+
+# Verify data loaded
+mcp__chrome-devtools__puppeteer_evaluate --script "document.querySelectorAll('table tbody tr').length"
+```
+
+### API Testing
+
+```bash
 # Test API endpoints
 curl http://localhost:8000/api/{entities} | jq .
 curl http://localhost:8000/api/{entities}/{id} | jq .
 
 # Get frontend URL
-mcp-cli call apx/get_frontend_url '{}'
+mcp__apx__get_frontend_url
 ```
 
-Manually verify in browser:
-- List page displays data
-- Detail page shows complete info
-- Mutations work (update, delete)
-- Loading states work (skeletons)
-- Browser console errors are automatically captured in APX dev logs
+### Test Checklist
+- [ ] Type checking passes (`apx dev check`)
+- [ ] API endpoints return correct data
+- [ ] UI renders without console errors
+- [ ] Navigation works (click tests)
+- [ ] Data displays correctly (evaluate tests)
+- [ ] Loading states work (skeletons)
+- [ ] Screenshots captured for visual verification
+
+**See [automated-testing.md](automated-testing.md)** for complete testing patterns with Puppeteer and MCP servers.
 
 ## Phase 5: Deployment & Monitoring
 
@@ -321,6 +348,7 @@ MCP_TOOLS = [
 - **[frontend-patterns.md](frontend-patterns.md)** - Complete frontend page templates
 - **[best-practices.md](best-practices.md)** - Best practices, anti-patterns, debugging
 - **[databricks-deployment.md](databricks-deployment.md)** - Databricks-specific deployment patterns, SDK gotchas, auth strategies
+- **[automated-testing.md](automated-testing.md)** - Automated UI testing with Chrome DevTools MCP and Puppeteer
 
 Read these files only when actively writing that type of code or debugging issues.
 

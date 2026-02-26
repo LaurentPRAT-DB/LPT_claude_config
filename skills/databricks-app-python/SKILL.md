@@ -160,6 +160,51 @@ class EntityIn(BaseModel):
 
 ---
 
+## Automated Testing with MCP Servers
+
+Use Chrome DevTools MCP for automated UI testing of deployed apps:
+
+```bash
+# Navigate to app (local or deployed)
+mcp__chrome-devtools__puppeteer_navigate --url "http://localhost:8080"
+
+# Take screenshot
+mcp__chrome-devtools__puppeteer_screenshot
+
+# Check for console errors
+mcp__chrome-devtools__puppeteer_console_logs
+
+# Test interactive elements
+mcp__chrome-devtools__puppeteer_click --selector "button[data-testid='submit']"
+
+# Verify data displayed
+mcp__chrome-devtools__puppeteer_evaluate --script "document.querySelector('.data-loaded') !== null"
+```
+
+### Test Checklist
+- [ ] App loads without errors
+- [ ] UI renders correctly (screenshot verification)
+- [ ] No JavaScript/console errors
+- [ ] Interactive elements work (buttons, forms)
+- [ ] Data loads and displays properly
+- [ ] API endpoints respond correctly
+
+### Testing Deployed Apps
+
+```bash
+# Get app URL
+APP_URL=$(databricks apps get <app-name> -p <profile> | jq -r '.url')
+
+# Navigate and test
+mcp__chrome-devtools__puppeteer_navigate --url "$APP_URL"
+mcp__chrome-devtools__puppeteer_screenshot --name "deployed-app"
+
+# Check logs for errors
+databricks apps logs <app-name> -p <profile> | tail -50
+```
+
+---
+
 ## Common Issues
 
 | Issue | Solution |
