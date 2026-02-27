@@ -1,13 +1,12 @@
 {
   "mcpServers": {
-    "databricks": {
-      "command": "/path/to/your/.ai-dev-kit/.venv/bin/python",
-      "args": ["/path/to/your/.ai-dev-kit/repo/databricks-mcp-server/run_server.py"],
-      "env": {"DATABRICKS_CONFIG_PROFILE": "DEFAULT"}
-    },
     "context7": {
       "command": "npx",
       "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["chrome-devtools-mcp@latest", "--userDataDir=$HOME/.vibe/chrome/profile"]
     }
   }
 }

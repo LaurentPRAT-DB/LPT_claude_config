@@ -2,6 +2,20 @@
 
 Personal Claude Code configuration files for Laurent Prat.
 
+## Quick Start (Automated)
+
+```bash
+# Clone and run setup script
+git clone https://github.com/LaurentPRAT-DB/LPT_claude_config.git ~/.claude
+cd ~/.claude
+chmod +x setup.sh
+./setup.sh
+```
+
+The setup script will install all dependencies (Homebrew, Node.js, Salesforce CLI, etc.) and create configuration files from templates.
+
+For detailed manual setup instructions, see [SETUP_GUIDE.md](SETUP_GUIDE.md).
+
 ## Contents
 
 | Directory | Description |
@@ -13,11 +27,11 @@ Personal Claude Code configuration files for Laurent Prat.
 | `plugins/` | Local plugins (medium-article) |
 | `projects/*/memory/` | Persistent memory files |
 
-## Setup on a New Machine
+## Manual Setup
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/LaurentPrat/LPT_claude_config.git ~/.claude
+   git clone https://github.com/LaurentPRAT-DB/LPT_claude_config.git ~/.claude
    ```
 
 2. **Create settings from templates:**
@@ -33,10 +47,23 @@ Personal Claude Code configuration files for Laurent Prat.
 
 4. **Edit mcp.json** and update paths for your machine.
 
-5. **Install plugins** (they are cached separately):
+5. **Install plugins** (they are cached separately - requires Databricks GitHub access):
    ```bash
-   claude /install fe-vibe
+   # Clone FE Vibe from databricks-field-eng repo
+   git clone https://github.com/databricks-field-eng/vibe.git ~/Documents/vibe
+   cd ~/Documents/vibe && ./install.sh
    ```
+
+## Dependencies
+
+| Tool | Installation |
+|------|-------------|
+| Homebrew | `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"` |
+| Node.js | `brew install node` |
+| Salesforce CLI | `brew install sf` |
+| Claude Code | `brew install --cask claude-code` |
+| Google Cloud SDK | [cloud.google.com/sdk](https://cloud.google.com/sdk/docs/install) |
+| Python 3 | `brew install python@3.13` |
 
 ## What's Excluded
 
