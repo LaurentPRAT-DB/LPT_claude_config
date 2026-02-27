@@ -341,6 +341,241 @@ if dist_dir.exists():
         return FileResponse(dist_dir / "index.html")
 ```
 
+## Deploy Validation Pattern (Inspired by Tresor)
+
+Production deployments should follow a multi-phase validation approach to catch issues before users do.
+
+### Phase 1: Pre-Flight Validation
+
+Run before deploying to catch configuration issues early:
+
+```bash
+#!/bin/bash
+# deploy-validate.sh - Phase 1: Pre-flight checks
+set -e
+
+TARGET="${1:-dev}"
+echo "==> Phase 1: Pre-flight validation for $TARGET"
+
+# 1.1 Validate app.yaml syntax
+echo "  Checking app.yaml..."
+python3 -c "import yaml; yaml.safe_load(open('app.yaml'))" || {
+  echo "  ERROR: app.yaml is invalid YAML"
+  exit 1
+}
+
+# 1.2 Check required environment variables are defined
+echo "  Checking required env vars..."
+grep -q "DATABRICKS_HOST" app.yaml || {
+  echo "  ERROR: DATABRICKS_HOST not set in app.yaml"
+  exit 1
+}
+
+# 1.3 Verify frontend is built
+echo "  Checking frontend build..."
+DIST_DIR="${APP_NAME}/__dist__"
+if [ ! -d "$DIST_DIR" ] || [ ! -f "$DIST_DIR/index.html" ]; then
+  echo "  WARNING: Frontend not built. Building now..."
+  cd "${APP_NAME}/ui" && npm run build && cd ../..
+fi
+
+# 1.4 Verify __dist__ not in .gitignore
+if grep -q "__dist__" .gitignore 2>/dev/null; then
+  echo "  ERROR: __dist__ is in .gitignore - deployment will fail!"
+  exit 1
+fi
+
+# 1.5 Type checking
+echo "  Running type checks..."
+cd "${APP_NAME}/ui" && npm run typecheck && cd ../..
+
+echo "  Pre-flight validation PASSED"
+```
+
+### Phase 2: Configuration Safety Checks
+
+Validate Databricks-specific configuration:
+
+```bash
+# 2.1 Verify warehouse ID exists for target workspace
+echo "==> Phase 2: Configuration safety"
+
+WAREHOUSE_ID=$(grep -A1 "DATABRICKS_WAREHOUSE_ID" app.yaml | tail -1 | sed 's/.*value: *"\([^"]*\)".*/\1/')
+echo "  Checking warehouse $WAREHOUSE_ID..."
+
+databricks warehouses get "$WAREHOUSE_ID" -p "$PROFILE" > /dev/null 2>&1 || {
+  echo "  ERROR: Warehouse $WAREHOUSE_ID not found in $TARGET workspace"
+  exit 1
+}
+
+# 2.2 Verify OBO scopes are configured
+echo "  Checking OBO configuration..."
+if grep -q "user_api_scopes" app.yaml; then
+  echo "  WARNING: user_api_scopes in app.yaml alone won't work!"
+  echo "  Remember to run: databricks apps update <name> --json '{\"user_api_scopes\": [\"sql\"]}'"
+fi
+
+# 2.3 Check for hardcoded values that should be workspace-specific
+echo "  Checking for hardcoded values..."
+if grep -q "localhost" app.yaml; then
+  echo "  WARNING: Found 'localhost' in app.yaml"
+fi
+
+echo "  Configuration safety PASSED"
+```
+
+### Phase 3: Deployment Execution
+
+```bash
+# 3.1 Deploy the bundle
+echo "==> Phase 3: Deployment"
+databricks bundle deploy -t "$TARGET" || {
+  echo "  ERROR: Bundle deployment failed"
+  exit 1
+}
+
+# 3.2 Enable OBO (CRITICAL - app.yaml alone doesn't work!)
+APP_NAME=$(grep "name:" databricks.yml | head -1 | awk '{print $2}')
+echo "  Enabling OBO for $APP_NAME..."
+databricks apps update "$APP_NAME" --json '{"user_api_scopes": ["sql"]}' -p "$PROFILE" || {
+  echo "  WARNING: Could not enable OBO - may need manual intervention"
+}
+
+# 3.3 Wait for app to be ready
+echo "  Waiting for app to start..."
+for i in {1..30}; do
+  STATUS=$(databricks apps get "$APP_NAME" -p "$PROFILE" | jq -r '.status.state')
+  if [ "$STATUS" = "RUNNING" ]; then
+    break
+  fi
+  echo "  Status: $STATUS (waiting...)"
+  sleep 10
+done
+
+echo "  Deployment COMPLETE"
+```
+
+### Phase 4: Post-Deployment Validation
+
+Validate the deployed app is working:
+
+```bash
+# 4.1 Get app URL
+echo "==> Phase 4: Post-deployment validation"
+APP_URL=$(databricks apps get "$APP_NAME" -p "$PROFILE" | jq -r '.url')
+echo "  App URL: $APP_URL"
+
+# 4.2 Health check
+echo "  Running health check..."
+HEALTH=$(curl -sf "$APP_URL/api/health" 2>/dev/null) || {
+  echo "  ERROR: Health endpoint not responding"
+  echo "  Check logs: databricks apps logs $APP_NAME -p $PROFILE"
+  exit 1
+}
+
+STATUS=$(echo "$HEALTH" | jq -r '.status')
+if [ "$STATUS" != "healthy" ]; then
+  echo "  WARNING: App status is $STATUS"
+  echo "  Health details: $HEALTH"
+fi
+
+# 4.3 OBO validation (requires authenticated request)
+echo "  Checking OBO authentication..."
+OBO_STATUS=$(echo "$HEALTH" | jq -r '.checks.obo_auth.status // "unknown"')
+if [ "$OBO_STATUS" = "not_configured" ]; then
+  echo "  WARNING: OBO not enabled - system table queries may fail"
+fi
+
+# 4.4 Data validation (smoke test)
+echo "  Running smoke test..."
+curl -sf "$APP_URL/api/me" > /dev/null || {
+  echo "  WARNING: /api/me endpoint failed"
+}
+
+echo ""
+echo "==> Deployment validation COMPLETE"
+echo "  App URL: $APP_URL"
+echo "  Health:  $STATUS"
+echo "  Logs:    $APP_URL/logz"
+```
+
+### Complete Deploy Script Example
+
+```bash
+#!/bin/bash
+# deploy.sh - Full deployment with validation
+set -e
+
+TARGET="${1:-dev}"
+
+# Map target to profile
+case "$TARGET" in
+  e2)   PROFILE="DEFAULT" ;;
+  prod) PROFILE="DEMO WEST" ;;
+  dev)  PROFILE="LPT_FREE_EDITION" ;;
+  *)    PROFILE="DEFAULT" ;;
+esac
+
+export TARGET PROFILE APP_NAME="job_monitor"
+
+echo "Deploying to $TARGET using profile $PROFILE"
+echo "============================================"
+
+# Phase 1: Pre-flight
+./scripts/validate-preflight.sh
+
+# Phase 2: Config safety
+./scripts/validate-config.sh
+
+# Phase 3: Deploy
+./scripts/deploy-bundle.sh
+
+# Phase 4: Post-deploy validation
+./scripts/validate-deployed.sh
+
+echo ""
+echo "SUCCESS: Deployment to $TARGET complete!"
+```
+
+### Validation Checklist
+
+Use this checklist before and after each deployment:
+
+**Pre-Deployment**
+- [ ] Frontend built (`npm run build`)
+- [ ] Type checks pass (`npm run typecheck`)
+- [ ] `__dist__/` not in `.gitignore`
+- [ ] `DATABRICKS_HOST` set in app.yaml
+- [ ] Warehouse ID valid for target workspace
+- [ ] No hardcoded localhost/dev values
+
+**Post-Deployment**
+- [ ] Health endpoint returns 200
+- [ ] Health status is "healthy"
+- [ ] OBO authentication working (check `gap-auth` header)
+- [ ] SQL queries return data (not 500 errors)
+- [ ] Version number updated in UI
+- [ ] Logs show no errors (`/logz` endpoint)
+
+### Multi-Workspace Deployment Matrix
+
+For apps deployed to multiple workspaces, maintain a deployment matrix:
+
+| Target | Profile | Warehouse ID | Last Deploy | Health |
+|--------|---------|--------------|-------------|--------|
+| e2 | DEFAULT | 06c1adfd3dbdacde | 2026-02-27 | |
+| prod | DEMO WEST | 75fd8278393d07eb | 2026-02-26 | |
+| dev | LPT_FREE | 58d41113cb262dce | 2026-02-25 | |
+
+**Monitor all deployments:**
+```bash
+for target in e2 prod dev; do
+  ./deploy.sh $target --validate-only
+done
+```
+
+---
+
 ## Troubleshooting Deployed Apps
 
 | Issue | Solution |
@@ -352,3 +587,6 @@ if dist_dir.exists():
 | Cluster API fails | Use SP auth, not OBO for cluster management |
 | Workspace links broken | Use hash-based routing (`/#setting/...`) |
 | SDK AttributeError | Use `getattr(obj, 'attr', None)` |
+| System tables 500 error | OBO not enabled - run `databricks apps update --json '{"user_api_scopes": ["sql"]}'` |
+| SQL returns 0 rows | `workspace_id` is BIGINT - don't quote in SQL |
+| Health degraded | Check `/api/health` response for specific failing check |

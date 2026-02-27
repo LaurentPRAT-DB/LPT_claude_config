@@ -347,9 +347,10 @@ MCP_TOOLS = [
 - **[backend-patterns.md](backend-patterns.md)** - Complete backend code templates
 - **[frontend-patterns.md](frontend-patterns.md)** - Complete frontend page templates
 - **[best-practices.md](best-practices.md)** - Best practices, anti-patterns, debugging
-- **[databricks-deployment.md](databricks-deployment.md)** - Databricks-specific deployment patterns, SDK gotchas, auth strategies
+- **[databricks-deployment.md](databricks-deployment.md)** - Databricks-specific deployment patterns, SDK gotchas, auth strategies, **deploy validation**
 - **[automated-testing.md](automated-testing.md)** - Automated UI testing with Chrome DevTools MCP and Puppeteer
 - **[production-testing.md](production-testing.md)** - Load testing, performance optimization, cache strategies, benchmarks
+- **[health-patterns.md](health-patterns.md)** - Comprehensive health check endpoints, readiness probes, production monitoring
 
 Read these files only when actively writing that type of code or debugging issues.
 
