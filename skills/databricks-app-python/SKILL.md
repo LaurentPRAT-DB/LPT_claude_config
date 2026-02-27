@@ -62,7 +62,7 @@ Copy this checklist and verify each item:
 
 ## Detailed Guides
 
-**Authorization**: Use [1-authorization.md](1-authorization.md) when configuring app or user authorization — covers service principal auth, on-behalf-of user tokens, OAuth scopes, and per-framework code examples. (Keywords: OAuth, service principal, user auth, on-behalf-of, access token, scopes)
+**Authorization**: Use [1-authorization.md](1-authorization.md) when configuring app or user authorization — covers service principal auth, on-behalf-of user tokens, OAuth scopes, per-framework code examples, and **CRITICAL OBO gotchas** (scopes not auto-applied, BIGINT workspace_id, per-router auth). (Keywords: OAuth, service principal, user auth, on-behalf-of, access token, scopes, OBO, system tables)
 
 **App resources**: Use [2-app-resources.md](2-app-resources.md) when connecting your app to Databricks resources — covers SQL warehouses, Lakebase, model serving, secrets, volumes, and the `valueFrom` pattern. (Keywords: resources, valueFrom, SQL warehouse, model serving, secrets, volumes, connections)
 
@@ -219,6 +219,9 @@ databricks apps logs <app-name> -p <profile> | tail -50
 | **Streamlit: set_page_config error** | `st.set_page_config()` must be the first Streamlit command |
 | **Dash: unstyled layout** | Add `dash-bootstrap-components`; use `dbc.themes.BOOTSTRAP` |
 | **Slow queries** | Use Lakebase for transactional/low-latency; SQL warehouse for analytical queries |
+| **OBO not working** | `user_api_scopes` in app.yaml alone isn't enough — also run `databricks apps update <name> --json '{"user_api_scopes": ["sql"]}'` |
+| **System table 500 errors** | Use OBO (user token), not SP auth; SP has limited system table permissions |
+| **System table returns 0 rows** | `workspace_id` is BIGINT — don't quote it in SQL (use `= 123` not `= '123'`) |
 
 ---
 

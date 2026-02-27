@@ -349,6 +349,7 @@ MCP_TOOLS = [
 - **[best-practices.md](best-practices.md)** - Best practices, anti-patterns, debugging
 - **[databricks-deployment.md](databricks-deployment.md)** - Databricks-specific deployment patterns, SDK gotchas, auth strategies
 - **[automated-testing.md](automated-testing.md)** - Automated UI testing with Chrome DevTools MCP and Puppeteer
+- **[production-testing.md](production-testing.md)** - Load testing, performance optimization, cache strategies, benchmarks
 
 Read these files only when actively writing that type of code or debugging issues.
 

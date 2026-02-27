@@ -141,10 +141,75 @@ When adding user authorization, select only the scopes your app needs:
 
 ---
 
+## CRITICAL: OBO Gotchas (Learned from Production)
+
+### 1. user_api_scopes NOT Auto-Applied
+
+**Problem**: Setting `user_api_scopes` in `app.yaml` alone does NOT enable OBO.
+
+**Solution**: You MUST also run the CLI command:
+```bash
+databricks apps update <app-name> --json '{"user_api_scopes": ["sql"]}' -p <profile>
+```
+
+Verify with:
+```bash
+databricks apps get <app-name> -p <profile>
+# Look for "effective_user_api_scopes" in output
+```
+
+### 2. Scope Format
+
+Use simple scope names, NOT expanded forms:
+- ✅ Correct: `sql`
+- ❌ Wrong: `sql:read`, `sql.statement-execution:execute`
+
+### 3. Per-Router OBO Configuration
+
+**CRITICAL**: ALL backend routes querying system tables MUST use user's OBO token.
+
+```python
+# ❌ WRONG - SP auth fails on system tables
+def get_workspace_client():
+    return WorkspaceClient()  # Uses SP credentials
+
+# ✅ CORRECT - Use OBO for system table access
+def get_workspace_client_obo(request: Request):
+    token = request.headers.get("x-forwarded-access-token")
+    if token:
+        return WorkspaceClient(token=token)  # User's permissions
+    return WorkspaceClient()  # Fallback to SP for non-user requests
+```
+
+**Why**: SP auth → limited system table permissions → 500 errors. OBO → user's existing permissions → works.
+
+### 4. System Table workspace_id is BIGINT
+
+**Problem**: Quoting workspace_id in SQL returns 0 rows.
+
+```sql
+-- ❌ WRONG (string comparison fails silently)
+WHERE workspace_id = '1234567890'
+
+-- ✅ CORRECT (BIGINT comparison)
+WHERE workspace_id = 1234567890
+```
+
+### 5. Detecting OBO User
+
+The `gap-auth` response header contains the authenticated user's email:
+```python
+user_email = response.headers.get("gap-auth")
+```
+
+---
+
 ## Best Practices
 
 - Never log, print, or write tokens to files
 - Grant service principal minimum required permissions on resources
 - Use `CAN MANAGE` only for trusted developers; `CAN USE` for app users
 - Enforce peer review for app code before production deployment
+- Always use OBO for system table queries (users typically have access already)
+- Verify OBO is enabled: `databricks apps get <name>` → check `effective_user_api_scopes`
 - Cookbook auth examples: [Streamlit](https://apps-cookbook.dev/docs/streamlit/authentication/users_get_current) · [Dash](https://apps-cookbook.dev/docs/dash/authentication/users_get_current) · [Reflex](https://apps-cookbook.dev/docs/reflex/authentication/users_get_current)
