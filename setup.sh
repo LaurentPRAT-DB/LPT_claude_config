@@ -42,14 +42,27 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Detect architecture
+# Detect architecture and OS
 ARCH=$(uname -m)
-if [ "$ARCH" = "arm64" ]; then
-    HOMEBREW_PREFIX="/opt/homebrew"
-    GCLOUD_ARCH="darwin-arm"
+OS=$(uname -s)
+
+if [ "$OS" = "Darwin" ]; then
+    # macOS
+    if [ "$ARCH" = "arm64" ]; then
+        HOMEBREW_PREFIX="/opt/homebrew"
+        GCLOUD_ARCH="darwin-arm"
+    else
+        HOMEBREW_PREFIX="/usr/local"
+        GCLOUD_ARCH="darwin-x86_64"
+    fi
 else
-    HOMEBREW_PREFIX="/usr/local"
-    GCLOUD_ARCH="darwin-x86_64"
+    # Linux
+    HOMEBREW_PREFIX="/home/linuxbrew/.linuxbrew"
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+        GCLOUD_ARCH="linux-arm"
+    else
+        GCLOUD_ARCH="linux-x86_64"
+    fi
 fi
 
 print_header "Claude Code Configuration Setup"
@@ -195,8 +208,15 @@ else
     echo "  ~/google-cloud-sdk/bin/gcloud init"
     echo ""
 
-    read -p "Would you like to install Google Cloud SDK now? (y/n) " -n 1 -r
-    echo
+    # Check if running interactively
+    if [ -t 0 ]; then
+        read -p "Would you like to install Google Cloud SDK now? (y/n) " -n 1 -r
+        echo
+    else
+        print_warning "Non-interactive mode - skipping Google Cloud SDK installation"
+        REPLY="n"
+    fi
+
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         print_info "Downloading Google Cloud SDK..."
         cd /tmp
