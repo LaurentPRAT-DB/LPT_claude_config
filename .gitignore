@@ -53,6 +53,3 @@ node_modules/
 
 # OS files
 .DS_Store
-
-# Test files
-test/
