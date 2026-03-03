@@ -1,0 +1,10 @@
+{
+  "name": "fe-salesforce-tools",
+  "description": "Salesforce authentication and CRUD operations for accounts, opportunities, and use cases",
+  "version": "1.0.0",
+  "author": {
+    "name": "Databricks Field Engineering"
+  },
+  "skills": "./skills/",
+  "commands": "./commands/"
+}

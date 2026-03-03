@@ -10,11 +10,21 @@ Instructions for installing and configuring FE Vibe plugins for Claude Code.
 
 ## Quick Installation
 
+### Option 1: With GitHub EMU Access (recommended)
+
 ```bash
 brew install gh && gh auth login --web --hostname github.com --git-protocol ssh --skip-ssh-key && gh release download latest --repo databricks-field-eng/vibe --pattern 'install_vibe.sh' -O - | zsh
 ```
 
 **Important:** When prompted, select your **Databricks EMU GitHub account** (not personal).
+
+### Option 2: Without GitHub EMU Access (offline install)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills/install-fe-vibe-offline.sh | bash
+```
+
+This installs from a snapshot in this repo. No EMU access required, but won't receive automatic updates.
 
 After installation, restart Claude Code to load the plugins.
 

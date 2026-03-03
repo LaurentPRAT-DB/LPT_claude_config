@@ -1,0 +1,10 @@
+{
+  "name": "fe-file-expenses",
+  "description": "Automate expense report filing with Emburse ChromeRiver - collect receipts and submit expense reports",
+  "version": "1.0.0",
+  "author": {
+    "name": "Databricks Field Engineering"
+  },
+  "skills": "./skills/",
+  "commands": "./commands/"
+}

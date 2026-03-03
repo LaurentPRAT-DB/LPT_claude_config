@@ -1,0 +1,10 @@
+{
+  "name": "fe-internal-tools",
+  "description": "Internal Databricks tools: GTM data queries, Genie Rooms, UCO-consumption analysis, Glean search, and AWS authentication",
+  "version": "1.3.0",
+  "author": {
+    "name": "Databricks Field Engineering"
+  },
+  "skills": "./skills/",
+  "commands": "./commands/"
+}

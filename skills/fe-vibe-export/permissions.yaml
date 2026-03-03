@@ -1,0 +1,86 @@
+# Claude Code Permissions Configuration
+# These permissions will be merged into  ~/.claude/settings.json
+
+allow:
+  # Base permissions
+  - "Bash"
+  - "Skill"
+
+  # File access - code directory
+  - "Read(~/code/**)"
+  - "Edit(~/code/**)"
+  - "Write(~/code/**)"
+
+  # File access - tmp directory
+  - "Read(//tmp/**)"
+  - "Edit(//tmp/**)"
+  - "Write(//tmp/**)"
+
+  # File access - vibe directory
+  - "Read(~/.vibe/**)"
+  - "Edit(~/.vibe/**)"
+  - "Write(~/.vibe/**)"
+
+  # File access - claude directory
+  - "Read(~/.claude/**)"
+
+  # File access - home directory (read only)
+  - "Read(~/**)"
+
+  # MCP tool permissions
+  - "mcp__proxy__slack__slack_write_api_call"
+  - "mcp__proxy__glean__glean_read_api_call"
+  - "mcp__proxy__glean__glean_write_api_call"
+
+  # Bash - allows all bash commands
+  # Note: "Bash" without parentheses allows all commands
+  # Use patterns like "Bash(npm:*)" for prefix matching specific commands
+
+  # Skills
+  - "Skill(aws-authentication)"
+  - "Skill(configure-vibe)"
+  - "Skill(databricks-authentication)"
+  - "Skill(databricks-demo)"
+  - "Skill(databricks-query)"
+  - "Skill(databricks-resource-deployment)"
+  - "Skill(databricks-warehouse-selector)"
+  - "Skill(databricks-workspace-deployment)"
+  - "Skill(databricks-fe-vm-workspace-deployment)"
+  - "Skill(databricks-oneenv-workspace-deployment)"
+  - "Skill(databricks-apps)"
+  - "Skill(databricks-lakebase)"
+  - "Skill(databricks-lakeview-dashboard)"
+  - "Skill(gmail)"
+  - "Skill(google-auth)"
+  - "Skill(google-calendar)"
+  - "Skill(google-docs)"
+  - "Skill(google-sheets-creator)"
+  - "Skill(google-slides-creator)"
+  - "Skill(logfood-querier)"
+  - "Skill(genie-rooms)"
+  - "Skill(uco-consumption-analysis)"
+  - "Skill(salesforce-actions)"
+  - "Skill(salesforce-authentication)"
+  - "Skill(jira-actions)"
+  - "Skill(emburse-expenses)"
+  - "Skill(file-expenses)"
+  - "Skill(databricks-sizing)"
+  - "Skill(poc-doc)"
+  - "Skill(product-question-research)"
+  - "Skill(security-questionnaire)"
+  - "Skill(uco-updates)"
+  - "Skill(support-escalation)"
+  - "Skill(performance-tuning)"
+  - "Skill(databricks-troubleshooting)"
+  - "Skill(draft-rca)"
+  - "Skill(validate-mcp-access)"
+  - "Skill(fe-snowflake)"
+  - "Skill(vibe-update)"
+  - "Skill(fe-poc-postmortem)"
+  - "Skill(fe-todo-list)"
+  - "Skill(fe-answer-customer-questions)"
+  - "Skill(fe-account-transition)"
+  - "Skill(fe-databricks-feature-tester)"
+  - "Skill(build-vibe-skill)"
+
+deny: []
