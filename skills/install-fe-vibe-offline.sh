@@ -4,10 +4,52 @@
 # Install FE Vibe skills without GitHub EMU access
 # Uses exported plugins from LaurentPRAT-DB/LPT_claude_config
 #
-# Usage: curl -fsSL https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills/install-fe-vibe-offline.sh | bash
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills/install-fe-vibe-offline.sh | bash
+#
+#   # With custom GCP quota project (for Google tools):
+#   curl -fsSL https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills/install-fe-vibe-offline.sh | bash -s -- --gcp-project YOUR_PROJECT_ID
 #
 
 set -e
+
+# Default values
+DEFAULT_GCP_PROJECT="gcp-sandbox-field-eng"
+GCP_PROJECT="$DEFAULT_GCP_PROJECT"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --gcp-project)
+            GCP_PROJECT="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "FE Vibe Offline Installer"
+            echo ""
+            echo "Usage:"
+            echo "  ./install-fe-vibe-offline.sh [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --gcp-project PROJECT_ID   GCP quota project for Google tools"
+            echo "                             Default: gcp-sandbox-field-eng"
+            echo "  --help, -h                 Show this help"
+            echo ""
+            echo "Examples:"
+            echo "  # Install with default GCP project (requires access to gcp-sandbox-field-eng)"
+            echo "  curl -fsSL https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills/install-fe-vibe-offline.sh | bash"
+            echo ""
+            echo "  # Install with custom GCP project"
+            echo "  curl -fsSL https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills/install-fe-vibe-offline.sh | bash -s -- --gcp-project my-gcp-project"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage"
+            exit 1
+            ;;
+    esac
+done
 
 REPO_URL="https://github.com/LaurentPRAT-DB/LPT_claude_config"
 REPO_RAW="https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills"
@@ -19,6 +61,7 @@ echo "  FE Vibe Offline Installer"
 echo "================================================"
 echo ""
 echo "Installing from: $REPO_URL"
+echo "GCP Quota Project: $GCP_PROJECT"
 echo "(No GitHub EMU access required)"
 echo ""
 
@@ -73,6 +116,18 @@ for plugin in "${PLUGINS[@]}"; do
         echo "  ✓ $plugin"
     fi
 done
+
+# Configure GCP quota project if different from default
+if [[ "$GCP_PROJECT" != "$DEFAULT_GCP_PROJECT" ]]; then
+    echo ""
+    echo "Configuring GCP quota project: $GCP_PROJECT"
+
+    # Replace quota project in all relevant files
+    find "$PLUGIN_CACHE" -type f \( -name "*.py" -o -name "*.sh" -o -name "*.md" -o -name "*.yaml" \) -exec \
+        sed -i '' "s/$DEFAULT_GCP_PROJECT/$GCP_PROJECT/g" {} \; 2>/dev/null || true
+
+    echo "  ✓ GCP project configured"
+fi
 
 # Merge permissions into settings.json
 echo ""
@@ -215,6 +270,8 @@ for plugin in "${PLUGINS[@]}"; do
     echo "  - $plugin"
 done
 echo ""
+echo "GCP Quota Project: $GCP_PROJECT"
+echo ""
 echo "Next steps:"
 echo "  1. Restart Claude Code to load plugins"
 echo "  2. Run authentication skills as needed:"
@@ -222,6 +279,17 @@ echo "     /databricks-authentication"
 echo "     /google-auth"
 echo "     /salesforce-authentication"
 echo ""
+if [[ "$GCP_PROJECT" != "$DEFAULT_GCP_PROJECT" ]]; then
+    echo "Google tools configured for: $GCP_PROJECT"
+    echo "Make sure you have access to this GCP project and these APIs enabled:"
+    echo "  - Google Drive API"
+    echo "  - Google Docs API"
+    echo "  - Google Sheets API"
+    echo "  - Google Slides API"
+    echo "  - Gmail API"
+    echo "  - Google Calendar API"
+    echo ""
+fi
 echo "Note: This is an offline install from a snapshot."
 echo "To get updates, ask Laurent for a new export or"
 echo "get GitHub EMU access for the official installer."

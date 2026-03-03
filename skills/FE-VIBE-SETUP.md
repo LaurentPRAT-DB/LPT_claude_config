@@ -26,6 +26,22 @@ curl -fsSL https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/ma
 
 This installs from a snapshot in this repo. No EMU access required, but won't receive automatic updates.
 
+#### Custom GCP Project (for Google tools)
+
+By default, Google tools use `gcp-sandbox-field-eng` as the quota project. If you don't have access to this project, specify your own:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills/install-fe-vibe-offline.sh | bash -s -- --gcp-project YOUR_PROJECT_ID
+```
+
+Your GCP project needs these APIs enabled:
+- Google Drive API
+- Google Docs API
+- Google Sheets API
+- Google Slides API
+- Gmail API
+- Google Calendar API
+
 After installation, restart Claude Code to load the plugins.
 
 ## Verify Installation
