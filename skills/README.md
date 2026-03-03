@@ -2,6 +2,15 @@
 
 Custom skills for Laurent Prat's development workflows.
 
+## FE Vibe Setup
+
+**New team member?** See [FE-VIBE-SETUP.md](FE-VIBE-SETUP.md) for installation instructions.
+
+Quick install:
+```bash
+brew install gh && gh auth login --web --hostname github.com --git-protocol ssh --skip-ssh-key && gh release download latest --repo databricks-field-eng/vibe --pattern 'install_vibe.sh' -O - | zsh
+```
+
 ## Available Skills
 
 ### 🔧 databricks-notebook-fix
