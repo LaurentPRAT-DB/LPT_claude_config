@@ -64,8 +64,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-REPO_URL="https://github.com/LaurentPRAT-DB/LPT_claude_config"
 REPO_RAW="https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills"
+PACKAGE_URL="$REPO_RAW/fe-vibe-plugins.tar.gz"
 PLUGIN_CACHE="$HOME/.claude/plugins/cache/fe-vibe"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
@@ -163,10 +163,20 @@ echo -e "${BLUE}[Step 4/6] Installing FE Vibe plugins...${NC}"
 TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
 
-# Clone just the skills directory (sparse checkout)
-git clone --depth 1 --filter=blob:none --sparse "$REPO_URL" repo 2>/dev/null
-cd repo
-git sparse-checkout set skills/fe-vibe-export 2>/dev/null
+# Download plugins package via HTTP (no git required)
+echo "Downloading plugins package..."
+if curl -fsSL "$PACKAGE_URL" -o fe-vibe-plugins.tar.gz; then
+    echo -e "  ${GREEN}✓${NC} Package downloaded"
+else
+    echo -e "${RED}Error: Failed to download plugins package${NC}"
+    echo "  URL: $PACKAGE_URL"
+    rm -rf "$TEMP_DIR"
+    exit 1
+fi
+
+# Extract plugins
+echo "Extracting plugins..."
+tar -xzf fe-vibe-plugins.tar.gz
 
 # Copy plugins to cache
 PLUGINS=(
@@ -183,8 +193,8 @@ PLUGINS=(
 )
 
 for plugin in "${PLUGINS[@]}"; do
-    if [[ -d "skills/fe-vibe-export/$plugin" ]]; then
-        cp -r "skills/fe-vibe-export/$plugin" "$PLUGIN_CACHE/"
+    if [[ -d "$plugin" ]]; then
+        cp -r "$plugin" "$PLUGIN_CACHE/"
         echo -e "  ${GREEN}✓${NC} $plugin"
     fi
 done
