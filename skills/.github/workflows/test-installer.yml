@@ -1,0 +1,113 @@
+name: Test FE Vibe Installer
+
+on:
+  push:
+    paths:
+      - 'skills/install-fe-vibe-offline.sh'
+      - 'skills/fe-vibe-plugins.tar.gz'
+      - '.github/workflows/test-installer.yml'
+  pull_request:
+    paths:
+      - 'skills/install-fe-vibe-offline.sh'
+      - 'skills/fe-vibe-plugins.tar.gz'
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  test-installer:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show environment
+        run: |
+          echo "macOS version:"
+          sw_vers
+          echo ""
+          echo "User: $USER"
+          echo "Home: $HOME"
+
+      - name: Test connectivity
+        run: |
+          echo "Testing GitHub raw content..."
+          curl -fsSL -o /dev/null -w "HTTP %{http_code}\n" \
+            "https://raw.githubusercontent.com/${{ github.repository }}/main/skills/install-fe-vibe-offline.sh"
+
+          echo "Testing package download..."
+          curl -fsSL -o /tmp/fe-vibe-plugins.tar.gz \
+            "https://raw.githubusercontent.com/${{ github.repository }}/main/skills/fe-vibe-plugins.tar.gz"
+          ls -lh /tmp/fe-vibe-plugins.tar.gz
+
+          echo "Testing package extraction..."
+          mkdir -p /tmp/test-extract
+          tar -xzf /tmp/fe-vibe-plugins.tar.gz -C /tmp/test-extract
+          echo "Plugins found:"
+          ls -la /tmp/test-extract
+
+      - name: Run installer (skip auth)
+        run: |
+          # Run installer with --skip-google-auth since we can't do browser auth in CI
+          curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/main/skills/install-fe-vibe-offline.sh" | \
+            bash -s -- --skip-google-auth
+        env:
+          # Prevent interactive prompts
+          NONINTERACTIVE: 1
+
+      - name: Verify installation
+        run: |
+          echo "Checking Claude Code directory..."
+          ls -la ~/.claude/ || echo "No ~/.claude directory"
+
+          echo ""
+          echo "Checking plugins cache..."
+          ls -la ~/.claude/plugins/cache/fe-vibe/ || echo "No plugins cache"
+
+          echo ""
+          echo "Checking settings.json..."
+          if [[ -f ~/.claude/settings.json ]]; then
+            echo "Settings file exists"
+            # Check if plugins are enabled
+            python3 -c "import json; s=json.load(open('$HOME/.claude/settings.json')); print('Enabled plugins:', list(s.get('enabledPlugins', {}).keys()))"
+          fi
+
+          echo ""
+          echo "Checking gcloud..."
+          which gcloud && gcloud --version | head -1 || echo "gcloud not in PATH"
+
+      - name: Test plugin structure
+        run: |
+          PLUGIN_DIR="$HOME/.claude/plugins/cache/fe-vibe"
+
+          # Check each expected plugin
+          PLUGINS=(
+            "fe-databricks-tools"
+            "fe-salesforce-tools"
+            "fe-google-tools"
+            "fe-internal-tools"
+            "fe-jira-tools"
+            "fe-file-expenses"
+            "fe-workflows"
+            "fe-specialized-agents"
+            "fe-vibe-setup"
+            "fe-mcp-servers"
+          )
+
+          echo "Checking plugins..."
+          MISSING=0
+          for plugin in "${PLUGINS[@]}"; do
+            if [[ -d "$PLUGIN_DIR/$plugin" ]]; then
+              echo "✓ $plugin"
+            else
+              echo "✗ $plugin (MISSING)"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+
+          if [[ $MISSING -gt 0 ]]; then
+            echo "ERROR: $MISSING plugins missing"
+            exit 1
+          fi
+
+          echo ""
+          echo "All plugins installed successfully!"
