@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 # FE Vibe Offline Installer
-# Install FE Vibe skills without GitHub EMU access
-# Uses exported plugins from LaurentPRAT-DB/LPT_claude_config
+# Complete installation of FE Vibe skills for Claude Code
+# Includes: plugins, gcloud CLI, Google authentication, and verification
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills/install-fe-vibe-offline.sh | bash
@@ -16,6 +16,14 @@ set -e
 # Default values
 DEFAULT_GCP_PROJECT="gcp-sandbox-field-eng"
 GCP_PROJECT="$DEFAULT_GCP_PROJECT"
+SKIP_GOOGLE_AUTH=false
+
+# Color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -23,6 +31,10 @@ while [[ $# -gt 0 ]]; do
         --gcp-project)
             GCP_PROJECT="$2"
             shift 2
+            ;;
+        --skip-google-auth)
+            SKIP_GOOGLE_AUTH=true
+            shift
             ;;
         --help|-h)
             echo "FE Vibe Offline Installer"
@@ -33,10 +45,11 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --gcp-project PROJECT_ID   GCP quota project for Google tools"
             echo "                             Default: gcp-sandbox-field-eng"
+            echo "  --skip-google-auth         Skip Google authentication step"
             echo "  --help, -h                 Show this help"
             echo ""
             echo "Examples:"
-            echo "  # Install with default GCP project (requires access to gcp-sandbox-field-eng)"
+            echo "  # Full install with Google auth"
             echo "  curl -fsSL https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills/install-fe-vibe-offline.sh | bash"
             echo ""
             echo "  # Install with custom GCP project"
@@ -56,36 +69,96 @@ REPO_RAW="https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/mai
 PLUGIN_CACHE="$HOME/.claude/plugins/cache/fe-vibe"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
-echo "================================================"
-echo "  FE Vibe Offline Installer"
-echo "================================================"
+echo -e "${BLUE}================================================${NC}"
+echo -e "${BLUE}  FE Vibe Complete Installer${NC}"
+echo -e "${BLUE}================================================${NC}"
 echo ""
-echo "Installing from: $REPO_URL"
+echo "This installer will:"
+echo "  1. Install FE Vibe plugins for Claude Code"
+echo "  2. Install Google Cloud CLI (if needed)"
+echo "  3. Authenticate with Google (for Google skills)"
+echo "  4. Verify GCP project access"
+echo ""
 echo "GCP Quota Project: $GCP_PROJECT"
-echo "(No GitHub EMU access required)"
 echo ""
 
 # Check for macOS
 if [[ "$(uname)" != "Darwin" ]]; then
-    echo "Error: This installer only supports macOS"
+    echo -e "${RED}Error: This installer only supports macOS${NC}"
     exit 1
 fi
 
-# Check for Claude Code
-if [[ ! -d "$HOME/.claude" ]]; then
-    echo "Error: Claude Code not installed"
-    echo "Install with: brew install --cask claude-code"
-    exit 1
+# Check for Homebrew
+echo -e "${BLUE}[Step 1/6] Checking Homebrew...${NC}"
+if ! command -v brew &> /dev/null; then
+    echo "Installing Homebrew..."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    # Add to path for Apple Silicon
+    if [[ -f "/opt/homebrew/bin/brew" ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    fi
 fi
-echo "✓ Claude Code detected"
+echo -e "${GREEN}✓${NC} Homebrew installed"
+
+# Check for Claude Code
+echo ""
+echo -e "${BLUE}[Step 2/6] Checking Claude Code...${NC}"
+if [[ ! -d "$HOME/.claude" ]]; then
+    echo "Installing Claude Code..."
+    brew install --cask claude-code
+    mkdir -p "$HOME/.claude"
+fi
+echo -e "${GREEN}✓${NC} Claude Code installed"
+
+# Check/Install gcloud CLI
+echo ""
+echo -e "${BLUE}[Step 3/6] Checking Google Cloud CLI...${NC}"
+if ! command -v gcloud &> /dev/null; then
+    echo "Installing Google Cloud CLI..."
+    brew install --cask google-cloud-sdk
+
+    # Source gcloud completion and path
+    if [[ -f "$(brew --prefix)/share/google-cloud-sdk/path.bash.inc" ]]; then
+        source "$(brew --prefix)/share/google-cloud-sdk/path.bash.inc"
+    fi
+    if [[ -f "$(brew --prefix)/share/google-cloud-sdk/completion.bash.inc" ]]; then
+        source "$(brew --prefix)/share/google-cloud-sdk/completion.bash.inc"
+    fi
+
+    # Also try zsh paths
+    if [[ -f "$(brew --prefix)/share/google-cloud-sdk/path.zsh.inc" ]]; then
+        source "$(brew --prefix)/share/google-cloud-sdk/path.zsh.inc"
+    fi
+fi
+
+# Find gcloud path
+GCLOUD_PATH=$(command -v gcloud 2>/dev/null || echo "")
+if [[ -z "$GCLOUD_PATH" ]]; then
+    # Try common locations
+    for path in "/opt/homebrew/bin/gcloud" "/usr/local/bin/gcloud" "$HOME/google-cloud-sdk/bin/gcloud"; do
+        if [[ -f "$path" ]]; then
+            GCLOUD_PATH="$path"
+            break
+        fi
+    done
+fi
+
+if [[ -n "$GCLOUD_PATH" ]]; then
+    GCLOUD_VERSION=$($GCLOUD_PATH --version 2>/dev/null | head -1 || echo "unknown")
+    echo -e "${GREEN}✓${NC} Google Cloud CLI installed: $GCLOUD_VERSION"
+else
+    echo -e "${YELLOW}⚠${NC} gcloud not found in PATH. You may need to restart your terminal."
+    echo "  Then run: gcloud auth application-default login"
+fi
 
 # Create directories
 mkdir -p "$PLUGIN_CACHE"
 mkdir -p "$HOME/.claude/settings"
 
-# Download and extract plugins
+# Download and install plugins
 echo ""
-echo "Downloading FE Vibe plugins..."
+echo -e "${BLUE}[Step 4/6] Installing FE Vibe plugins...${NC}"
 
 TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
@@ -96,7 +169,6 @@ cd repo
 git sparse-checkout set skills/fe-vibe-export 2>/dev/null
 
 # Copy plugins to cache
-echo "Installing plugins..."
 PLUGINS=(
     "fe-databricks-tools"
     "fe-salesforce-tools"
@@ -113,7 +185,7 @@ PLUGINS=(
 for plugin in "${PLUGINS[@]}"; do
     if [[ -d "skills/fe-vibe-export/$plugin" ]]; then
         cp -r "skills/fe-vibe-export/$plugin" "$PLUGIN_CACHE/"
-        echo "  ✓ $plugin"
+        echo -e "  ${GREEN}✓${NC} $plugin"
     fi
 done
 
@@ -121,12 +193,9 @@ done
 if [[ "$GCP_PROJECT" != "$DEFAULT_GCP_PROJECT" ]]; then
     echo ""
     echo "Configuring GCP quota project: $GCP_PROJECT"
-
-    # Replace quota project in all relevant files
     find "$PLUGIN_CACHE" -type f \( -name "*.py" -o -name "*.sh" -o -name "*.md" -o -name "*.yaml" \) -exec \
         sed -i '' "s/$DEFAULT_GCP_PROJECT/$GCP_PROJECT/g" {} \; 2>/dev/null || true
-
-    echo "  ✓ GCP project configured"
+    echo -e "  ${GREEN}✓${NC} GCP project configured"
 fi
 
 # Merge permissions into settings.json
@@ -138,24 +207,19 @@ if [[ ! -f "$SETTINGS_FILE" ]]; then
     echo '{"permissions":{"allow":[],"deny":[]},"enabledPlugins":{}}' > "$SETTINGS_FILE"
 fi
 
-# Read permissions from exported yaml
-PERMISSIONS_FILE="skills/fe-vibe-export/permissions.yaml"
-
-# Use Python to merge permissions (more reliable than jq for this)
+# Use Python to merge permissions
 python3 << PYTHON_SCRIPT
 import json
 import os
 
 settings_file = os.path.expanduser("$SETTINGS_FILE")
 
-# Read existing settings
 try:
     with open(settings_file, 'r') as f:
         settings = json.load(f)
 except:
     settings = {}
 
-# Ensure structure exists
 if 'permissions' not in settings:
     settings['permissions'] = {}
 if 'allow' not in settings['permissions']:
@@ -165,105 +229,148 @@ if 'deny' not in settings['permissions']:
 if 'enabledPlugins' not in settings:
     settings['enabledPlugins'] = {}
 
-# Add FE Vibe permissions
 vibe_permissions = [
-    "Bash",
-    "Skill",
-    "Read(~/code/**)",
-    "Edit(~/code/**)",
-    "Write(~/code/**)",
-    "Read(//tmp/**)",
-    "Edit(//tmp/**)",
-    "Write(//tmp/**)",
-    "Read(~/.vibe/**)",
-    "Edit(~/.vibe/**)",
-    "Write(~/.vibe/**)",
-    "Read(~/.claude/**)",
-    "Read(~/**)",
-    "Skill(aws-authentication)",
-    "Skill(configure-vibe)",
-    "Skill(databricks-authentication)",
-    "Skill(databricks-demo)",
-    "Skill(databricks-query)",
-    "Skill(databricks-resource-deployment)",
-    "Skill(databricks-warehouse-selector)",
-    "Skill(databricks-fe-vm-workspace-deployment)",
-    "Skill(databricks-oneenv-workspace-deployment)",
-    "Skill(databricks-apps)",
-    "Skill(databricks-lakebase)",
-    "Skill(databricks-lakeview-dashboard)",
-    "Skill(gmail)",
-    "Skill(google-auth)",
-    "Skill(google-calendar)",
-    "Skill(google-docs)",
-    "Skill(google-sheets-creator)",
-    "Skill(google-slides-creator)",
-    "Skill(logfood-querier)",
-    "Skill(genie-rooms)",
-    "Skill(uco-consumption-analysis)",
-    "Skill(salesforce-actions)",
-    "Skill(salesforce-authentication)",
-    "Skill(jira-actions)",
-    "Skill(emburse-expenses)",
-    "Skill(file-expenses)",
-    "Skill(databricks-sizing)",
-    "Skill(poc-doc)",
-    "Skill(product-question-research)",
-    "Skill(security-questionnaire)",
-    "Skill(uco-updates)",
-    "Skill(support-escalation)",
-    "Skill(performance-tuning)",
-    "Skill(databricks-troubleshooting)",
-    "Skill(draft-rca)",
-    "Skill(validate-mcp-access)",
-    "Skill(fe-snowflake)",
-    "Skill(vibe-update)",
-    "Skill(fe-poc-postmortem)",
-    "Skill(fe-todo-list)",
-    "Skill(fe-answer-customer-questions)",
-    "Skill(fe-account-transition)",
-    "Skill(fe-databricks-feature-tester)",
+    "Bash", "Skill",
+    "Read(~/code/**)", "Edit(~/code/**)", "Write(~/code/**)",
+    "Read(//tmp/**)", "Edit(//tmp/**)", "Write(//tmp/**)",
+    "Read(~/.vibe/**)", "Edit(~/.vibe/**)", "Write(~/.vibe/**)",
+    "Read(~/.claude/**)", "Read(~/**)",
+    "Skill(aws-authentication)", "Skill(configure-vibe)",
+    "Skill(databricks-authentication)", "Skill(databricks-demo)",
+    "Skill(databricks-query)", "Skill(databricks-resource-deployment)",
+    "Skill(databricks-warehouse-selector)", "Skill(databricks-fe-vm-workspace-deployment)",
+    "Skill(databricks-oneenv-workspace-deployment)", "Skill(databricks-apps)",
+    "Skill(databricks-lakebase)", "Skill(databricks-lakeview-dashboard)",
+    "Skill(gmail)", "Skill(google-auth)", "Skill(google-calendar)",
+    "Skill(google-docs)", "Skill(google-sheets-creator)", "Skill(google-slides-creator)",
+    "Skill(logfood-querier)", "Skill(genie-rooms)", "Skill(uco-consumption-analysis)",
+    "Skill(salesforce-actions)", "Skill(salesforce-authentication)",
+    "Skill(jira-actions)", "Skill(emburse-expenses)", "Skill(file-expenses)",
+    "Skill(databricks-sizing)", "Skill(poc-doc)", "Skill(product-question-research)",
+    "Skill(security-questionnaire)", "Skill(uco-updates)", "Skill(support-escalation)",
+    "Skill(performance-tuning)", "Skill(databricks-troubleshooting)", "Skill(draft-rca)",
+    "Skill(validate-mcp-access)", "Skill(fe-snowflake)", "Skill(vibe-update)",
+    "Skill(fe-poc-postmortem)", "Skill(fe-todo-list)", "Skill(fe-answer-customer-questions)",
+    "Skill(fe-account-transition)", "Skill(fe-databricks-feature-tester)",
 ]
 
-# Merge permissions (avoid duplicates)
 existing = set(settings['permissions']['allow'])
 for perm in vibe_permissions:
     if perm not in existing:
         settings['permissions']['allow'].append(perm)
 
-# Enable plugins
 plugins_to_enable = [
-    "fe-databricks-tools@fe-vibe",
-    "fe-salesforce-tools@fe-vibe",
-    "fe-google-tools@fe-vibe",
-    "fe-specialized-agents@fe-vibe",
-    "fe-internal-tools@fe-vibe",
-    "fe-vibe-setup@fe-vibe",
-    "fe-mcp-servers@fe-vibe",
-    "fe-jira-tools@fe-vibe",
-    "fe-file-expenses@fe-vibe",
-    "fe-workflows@fe-vibe",
+    "fe-databricks-tools@fe-vibe", "fe-salesforce-tools@fe-vibe",
+    "fe-google-tools@fe-vibe", "fe-specialized-agents@fe-vibe",
+    "fe-internal-tools@fe-vibe", "fe-vibe-setup@fe-vibe",
+    "fe-mcp-servers@fe-vibe", "fe-jira-tools@fe-vibe",
+    "fe-file-expenses@fe-vibe", "fe-workflows@fe-vibe",
 ]
 
 for plugin in plugins_to_enable:
     settings['enabledPlugins'][plugin] = True
 
-# Write settings
 with open(settings_file, 'w') as f:
     json.dump(settings, f, indent=2)
 
-print("  ✓ Permissions configured")
-print("  ✓ Plugins enabled")
+print("  \033[0;32m✓\033[0m Permissions configured")
+print("  \033[0;32m✓\033[0m Plugins enabled")
 PYTHON_SCRIPT
 
-# Cleanup
+# Cleanup temp directory
 cd /
 rm -rf "$TEMP_DIR"
 
+# Google Authentication
 echo ""
-echo "================================================"
-echo "  Installation Complete!"
-echo "================================================"
+echo -e "${BLUE}[Step 5/6] Google Authentication...${NC}"
+
+if [[ "$SKIP_GOOGLE_AUTH" == "true" ]]; then
+    echo -e "${YELLOW}⚠${NC} Skipping Google authentication (--skip-google-auth)"
+elif [[ -z "$GCLOUD_PATH" ]]; then
+    echo -e "${YELLOW}⚠${NC} gcloud not found. Skipping authentication."
+    echo "  After restarting terminal, run: gcloud auth application-default login"
+else
+    # Check if already authenticated
+    if $GCLOUD_PATH auth application-default print-access-token &> /dev/null; then
+        ACCOUNT=$($GCLOUD_PATH config get-value account 2>/dev/null || echo "unknown")
+        echo -e "${GREEN}✓${NC} Already authenticated as: $ACCOUNT"
+    else
+        echo "Opening browser for Google authentication..."
+        echo "Please sign in with your Databricks Google account."
+        echo ""
+
+        # Run authentication with required scopes
+        $GCLOUD_PATH auth application-default login \
+            --scopes=https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/documents,https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/presentations,https://www.googleapis.com/auth/gmail.modify,https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/cloud-platform \
+            2>/dev/null || {
+                echo -e "${YELLOW}⚠${NC} Authentication skipped or failed."
+                echo "  You can authenticate later with: gcloud auth application-default login"
+            }
+
+        if $GCLOUD_PATH auth application-default print-access-token &> /dev/null; then
+            ACCOUNT=$($GCLOUD_PATH config get-value account 2>/dev/null || echo "unknown")
+            echo -e "${GREEN}✓${NC} Authenticated as: $ACCOUNT"
+        fi
+    fi
+fi
+
+# Verify GCP Access
+echo ""
+echo -e "${BLUE}[Step 6/6] Verifying GCP Access...${NC}"
+
+if [[ -z "$GCLOUD_PATH" ]] || ! $GCLOUD_PATH auth application-default print-access-token &> /dev/null; then
+    echo -e "${YELLOW}⚠${NC} Cannot verify GCP access (not authenticated)"
+else
+    TOKEN=$($GCLOUD_PATH auth application-default print-access-token 2>/dev/null)
+
+    # Test Drive API with quota project
+    RESPONSE=$(curl -s -w "\n%{http_code}" \
+        "https://www.googleapis.com/drive/v3/about?fields=user" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "x-goog-user-project: $GCP_PROJECT" 2>/dev/null)
+
+    HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+
+    if [[ "$HTTP_CODE" == "200" ]]; then
+        echo -e "${GREEN}✓${NC} GCP project access verified: $GCP_PROJECT"
+
+        # Quick API check
+        APIS_OK=true
+        for api in "drive" "docs" "sheets" "gmail" "calendar"; do
+            case $api in
+                drive) url="https://www.googleapis.com/drive/v3/about?fields=user" ;;
+                docs) url="https://docs.googleapis.com/v1/documents/1" ;;
+                sheets) url="https://sheets.googleapis.com/v4/spreadsheets/1" ;;
+                gmail) url="https://gmail.googleapis.com/gmail/v1/users/me/profile" ;;
+                calendar) url="https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1" ;;
+            esac
+
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "$url" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "x-goog-user-project: $GCP_PROJECT" 2>/dev/null)
+
+            # 200, 400, 404 all indicate API is accessible
+            if [[ "$CODE" == "200" || "$CODE" == "400" || "$CODE" == "404" ]]; then
+                echo -e "  ${GREEN}✓${NC} $api API"
+            else
+                echo -e "  ${RED}✗${NC} $api API (HTTP $CODE)"
+                APIS_OK=false
+            fi
+        done
+    else
+        echo -e "${RED}✗${NC} Cannot access GCP project: $GCP_PROJECT (HTTP $HTTP_CODE)"
+        echo ""
+        echo "You may need to request access to this project."
+        echo "Or use a different project with: --gcp-project YOUR_PROJECT"
+    fi
+fi
+
+# Final Summary
+echo ""
+echo -e "${BLUE}================================================${NC}"
+echo -e "${GREEN}  Installation Complete!${NC}"
+echo -e "${BLUE}================================================${NC}"
 echo ""
 echo "Installed plugins:"
 for plugin in "${PLUGINS[@]}"; do
@@ -272,25 +379,11 @@ done
 echo ""
 echo "GCP Quota Project: $GCP_PROJECT"
 echo ""
-echo "Next steps:"
+echo -e "${YELLOW}Next steps:${NC}"
 echo "  1. Restart Claude Code to load plugins"
-echo "  2. Run authentication skills as needed:"
-echo "     /databricks-authentication"
-echo "     /google-auth"
-echo "     /salesforce-authentication"
+echo "  2. Use skills like: /gmail, /google-docs, /databricks-query"
 echo ""
-if [[ "$GCP_PROJECT" != "$DEFAULT_GCP_PROJECT" ]]; then
-    echo "Google tools configured for: $GCP_PROJECT"
-    echo "Make sure you have access to this GCP project and these APIs enabled:"
-    echo "  - Google Drive API"
-    echo "  - Google Docs API"
-    echo "  - Google Sheets API"
-    echo "  - Google Slides API"
-    echo "  - Gmail API"
-    echo "  - Google Calendar API"
-    echo ""
-fi
-echo "Note: This is an offline install from a snapshot."
-echo "To get updates, ask Laurent for a new export or"
-echo "get GitHub EMU access for the official installer."
+echo "For other authentications (run inside Claude Code):"
+echo "  /databricks-authentication"
+echo "  /salesforce-authentication"
 echo ""
