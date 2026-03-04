@@ -1,29 +1,24 @@
 #!/bin/bash
 #
-# Build and run the FE Vibe install connectivity test
+# Build and run the FE Vibe installation simulation in a container
+# Simulates a colleague's fresh laptop environment
 #
 # Usage:
-#   ./run-test.sh                    # Basic connectivity test
-#   ./run-test.sh --with-auth        # Test with Google authentication
-#   ./run-test.sh --shell            # Open shell in container
+#   ./run-test.sh                    # Full installation simulation
+#   ./run-test.sh --shell            # Open shell in container for debugging
 #
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-IMAGE_NAME="fe-vibe-test"
+IMAGE_NAME="fe-vibe-colleague-sim"
 
 # Parse arguments
-WITH_AUTH=false
 OPEN_SHELL=false
 GCP_PROJECT="${GCP_PROJECT:-gcp-sandbox-field-eng}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --with-auth)
-            WITH_AUTH=true
-            shift
-            ;;
         --shell)
             OPEN_SHELL=true
             shift
@@ -34,19 +29,27 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: ./run-test.sh [--with-auth] [--shell] [--gcp-project PROJECT]"
+            echo "Usage: ./run-test.sh [--shell] [--gcp-project PROJECT]"
             exit 1
             ;;
     esac
 done
 
 echo "================================================"
-echo "  FE Vibe Install Test Container"
+echo "  FE Vibe Installation Simulation"
+echo "  (Colleague's Fresh Laptop)"
 echo "================================================"
 echo ""
 
+# Check if Docker is running
+if ! docker info &>/dev/null; then
+    echo "Error: Docker is not running."
+    echo "Please start Docker Desktop and try again."
+    exit 1
+fi
+
 # Build image
-echo "Building test container..."
+echo "Building simulation container..."
 docker build -t "$IMAGE_NAME" "$SCRIPT_DIR" --quiet
 echo "✓ Container built"
 echo ""
@@ -58,31 +61,14 @@ DOCKER_ARGS=(
     "-e" "GCP_PROJECT=$GCP_PROJECT"
 )
 
-# Add authentication if requested
-if [[ "$WITH_AUTH" == "true" ]]; then
-    echo "Getting Google access token..."
-    if command -v gcloud &> /dev/null; then
-        TOKEN=$(gcloud auth application-default print-access-token 2>/dev/null || echo "")
-        if [[ -n "$TOKEN" ]]; then
-            DOCKER_ARGS+=("-e" "GOOGLE_TOKEN=$TOKEN")
-            echo "✓ Token obtained"
-        else
-            echo "⚠ Could not get token. Run: gcloud auth application-default login"
-        fi
-    else
-        echo "⚠ gcloud not installed. Skipping authentication test."
-    fi
-    echo ""
-fi
-
 # Run container
 if [[ "$OPEN_SHELL" == "true" ]]; then
     echo "Opening shell in container..."
-    echo "Run '/test/test-install.sh' to execute tests"
+    echo "Run './test-full-install.sh' to execute tests"
     echo ""
     docker run -it "${DOCKER_ARGS[@]}" "$IMAGE_NAME" /bin/bash
 else
-    echo "Running connectivity tests..."
+    echo "Running full installation simulation..."
     echo ""
     docker run "${DOCKER_ARGS[@]}" "$IMAGE_NAME"
 fi

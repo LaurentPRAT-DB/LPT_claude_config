@@ -78,95 +78,70 @@ done
 # ============================================
 # Check Email Mode (no sudo required)
 # ============================================
-if [[ -n "$CHECK_EMAIL" ]]; then
-    # Disable exit on error for this section (some commands may fail gracefully)
-    set +e
+check_email_access() {
+    local email="$1"
+    local project="$2"
 
     echo -e "${BLUE}================================================${NC}"
-    echo -e "${BLUE}  GCP Access Check for: $CHECK_EMAIL${NC}"
+    echo -e "${BLUE}  GCP Access Check for: $email${NC}"
     echo -e "${BLUE}================================================${NC}"
     echo ""
-    echo "GCP Project: $GCP_PROJECT"
+    echo "GCP Project: $project"
     echo ""
 
     # Check if we have gcloud and are authenticated
     if ! command -v gcloud &> /dev/null; then
         echo -e "${RED}Error: gcloud not found. Install it first.${NC}"
-        exit 1
+        return 1
     fi
 
-    TOKEN=$(gcloud auth application-default print-access-token 2>/dev/null || echo "")
-    if [[ -z "$TOKEN" ]]; then
+    local token
+    token=$(gcloud auth application-default print-access-token 2>/dev/null) || token=""
+    if [[ -z "$token" ]]; then
         echo -e "${RED}Error: Not authenticated. Run: gcloud auth application-default login${NC}"
-        exit 1
+        return 1
     fi
 
-    CURRENT_USER=$(gcloud config get-value account 2>/dev/null || echo "unknown")
-    echo "Checking as: $CURRENT_USER"
+    local current_user
+    current_user=$(gcloud config get-value account 2>/dev/null) || current_user="unknown"
+    echo "Checking as: $current_user"
     echo ""
 
     echo -e "${BLUE}[Step 1/3] Checking project IAM policy...${NC}"
 
     # Get IAM policy for the project
-    IAM_POLICY=$(gcloud projects get-iam-policy "$GCP_PROJECT" --format=json 2>/dev/null || echo "")
+    local iam_policy
+    iam_policy=$(gcloud projects get-iam-policy "$project" --format=json 2>/dev/null) || iam_policy=""
 
-    if [[ -z "$IAM_POLICY" ]]; then
-        echo -e "${RED}✗ Cannot read IAM policy for $GCP_PROJECT${NC}"
+    if [[ -z "$iam_policy" ]]; then
+        echo -e "${RED}✗ Cannot read IAM policy for $project${NC}"
         echo "  You may not have permission to view IAM policies."
-        echo ""
-        echo "Alternative: Ask your colleague to run this command themselves:"
-        echo "  curl -fsSL https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills/verify-gcp-access.sh | bash"
-        exit 1
+        return 1
     fi
 
     # Check if email is in the policy (direct binding)
-    DIRECT_ACCESS=false
-    if echo "$IAM_POLICY" | grep -q "$CHECK_EMAIL"; then
-        DIRECT_ACCESS=true
-        echo -e "${GREEN}✓${NC} Direct IAM binding found for $CHECK_EMAIL"
-
-        # Show which roles
-        ROLES=$(echo "$IAM_POLICY" | python3 -c "
-import json, sys
-policy = json.load(sys.stdin)
-email = '$CHECK_EMAIL'
-roles = []
-for binding in policy.get('bindings', []):
-    for member in binding.get('members', []):
-        if email in member:
-            roles.append(binding.get('role', 'unknown'))
-print(', '.join(roles) if roles else 'none')
-" 2>/dev/null || echo "unknown")
-        echo "  Roles: $ROLES"
+    local direct_access="false"
+    if echo "$iam_policy" | grep -q "$email"; then
+        direct_access="true"
+        echo -e "${GREEN}✓${NC} Direct IAM binding found for $email"
     else
-        echo -e "${YELLOW}⚠${NC} No direct IAM binding for $CHECK_EMAIL"
+        echo -e "${YELLOW}⚠${NC} No direct IAM binding for $email"
     fi
 
     echo ""
     echo -e "${BLUE}[Step 2/3] Checking group memberships...${NC}"
 
-    # Check for group bindings that might include the user
-    GROUPS=$(echo "$IAM_POLICY" | python3 -c "
-import json, sys
-policy = json.load(sys.stdin)
-groups = set()
-for binding in policy.get('bindings', []):
-    for member in binding.get('members', []):
-        if member.startswith('group:'):
-            groups.add(member.replace('group:', ''))
-for g in sorted(groups):
-    print(g)
-" 2>/dev/null || echo "")
+    # Extract groups using grep (no Python needed)
+    local groups
+    groups=$(echo "$iam_policy" | grep -o '"group:[^"]*"' | sed 's/"//g' | sed 's/group://g' | sort -u)
 
-    if [[ -n "$GROUPS" ]]; then
+    if [[ -n "$groups" ]]; then
         echo "Project has access via these groups:"
-        # Use here-string to avoid subshell issues with pipe
-        while IFS= read -r group; do
+        echo "$groups" | while IFS= read -r group; do
             [[ -n "$group" ]] && echo "  - $group"
-        done <<< "$GROUPS"
+        done
         echo ""
-        echo -e "${YELLOW}Note:${NC} Check if $CHECK_EMAIL is a member of any of these groups."
-        echo "  (Databricks employees typically have inherited access via organization)"
+        echo -e "${YELLOW}Note:${NC} Check if $email is a member of any of these groups."
     else
         echo "No group bindings found."
     fi
@@ -175,17 +150,18 @@ for g in sorted(groups):
     echo -e "${BLUE}[Step 3/3] Checking domain-wide access...${NC}"
 
     # Check for domain bindings
-    DOMAIN_ACCESS=$(echo "$IAM_POLICY" | grep -o 'domain:[^"]*' | head -1 || echo "")
-    if [[ -n "$DOMAIN_ACCESS" ]]; then
-        DOMAIN=$(echo "$DOMAIN_ACCESS" | cut -d: -f2)
-        EMAIL_DOMAIN=$(echo "$CHECK_EMAIL" | cut -d@ -f2)
+    local domain_access
+    domain_access=$(echo "$iam_policy" | grep -o '"domain:[^"]*"' | head -1 | sed 's/"//g' | sed 's/domain://g')
+    local email_domain
+    email_domain=$(echo "$email" | cut -d@ -f2)
 
-        if [[ "$EMAIL_DOMAIN" == "$DOMAIN" ]]; then
-            echo -e "${GREEN}✓${NC} Domain-wide access: $DOMAIN"
-            echo "  $CHECK_EMAIL matches the domain and should have access."
+    if [[ -n "$domain_access" ]]; then
+        if [[ "$email_domain" == "$domain_access" ]]; then
+            echo -e "${GREEN}✓${NC} Domain-wide access: $domain_access"
+            echo "  $email matches the domain and should have access."
         else
-            echo -e "${YELLOW}⚠${NC} Domain binding exists for: $DOMAIN"
-            echo "  $CHECK_EMAIL is from $EMAIL_DOMAIN (different domain)"
+            echo -e "${YELLOW}⚠${NC} Domain binding exists for: $domain_access"
+            echo "  $email is from $email_domain (different domain)"
         fi
     else
         echo "No domain-wide bindings found."
@@ -194,13 +170,12 @@ for g in sorted(groups):
     # Check organization-level inheritance
     echo ""
     echo -e "${BLUE}Organization-level access:${NC}"
-    EMAIL_DOMAIN=$(echo "$CHECK_EMAIL" | cut -d@ -f2)
-    if [[ "$EMAIL_DOMAIN" == "databricks.com" ]]; then
-        echo -e "${GREEN}✓${NC} $CHECK_EMAIL is a @databricks.com account"
+    if [[ "$email_domain" == "databricks.com" ]]; then
+        echo -e "${GREEN}✓${NC} $email is a @databricks.com account"
         echo "  Databricks employees typically have inherited access from the organization."
         echo "  They should be able to use the Google skills."
     else
-        echo -e "${YELLOW}⚠${NC} $CHECK_EMAIL is not a @databricks.com account"
+        echo -e "${YELLOW}⚠${NC} $email is not a @databricks.com account"
         echo "  They may need explicit access to the project."
     fi
 
@@ -210,25 +185,26 @@ for g in sorted(groups):
     echo -e "${BLUE}================================================${NC}"
     echo ""
 
-    if [[ "$DIRECT_ACCESS" == "true" ]] || [[ "$EMAIL_DOMAIN" == "databricks.com" ]]; then
-        echo -e "${GREEN}$CHECK_EMAIL should have access to $GCP_PROJECT${NC}"
+    if [[ "$direct_access" == "true" ]] || [[ "$email_domain" == "databricks.com" ]]; then
+        echo -e "${GREEN}$email should have access to $project${NC}"
         echo ""
         echo "They can verify by running:"
         echo "  curl -fsSL https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills/verify-gcp-access.sh | bash"
     else
-        echo -e "${YELLOW}$CHECK_EMAIL may not have access to $GCP_PROJECT${NC}"
+        echo -e "${YELLOW}$email may not have access to $project${NC}"
         echo ""
         echo "Options:"
-        echo "  1. Use a different GCP project they have access to:"
-        echo "     curl -fsSL .../install-fe-vibe-offline.sh | bash -s -- --gcp-project THEIR_PROJECT"
-        echo ""
-        echo "  2. Request access to $GCP_PROJECT"
-        echo ""
-        echo "  3. Have them verify their own access:"
-        echo "     curl -fsSL https://raw.githubusercontent.com/LaurentPRAT-DB/LPT_claude_config/main/skills/verify-gcp-access.sh | bash"
+        echo "  1. Use a different GCP project they have access to"
+        echo "  2. Request access to $project"
+        echo "  3. Have them verify their own access"
     fi
     echo ""
-    exit 0
+    return 0
+}
+
+if [[ -n "$CHECK_EMAIL" ]]; then
+    check_email_access "$CHECK_EMAIL" "$GCP_PROJECT"
+    exit $?
 fi
 
 # ============================================

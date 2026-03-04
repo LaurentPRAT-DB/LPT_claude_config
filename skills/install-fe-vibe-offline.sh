@@ -74,10 +74,10 @@ echo -e "${BLUE}  FE Vibe Complete Installer${NC}"
 echo -e "${BLUE}================================================${NC}"
 echo ""
 echo "This installer will:"
-echo "  1. Install FE Vibe plugins for Claude Code"
-echo "  2. Install Google Cloud CLI (if needed)"
+echo "  1. Install Homebrew, Claude Code, gcloud CLI, Salesforce CLI"
+echo "  2. Install FE Vibe plugins for Claude Code"
 echo "  3. Authenticate with Google (for Google skills)"
-echo "  4. Verify GCP project access"
+echo "  4. Verify GCP project access and Google APIs"
 echo ""
 echo "GCP Quota Project: $GCP_PROJECT"
 echo ""
@@ -89,7 +89,7 @@ if [[ "$(uname)" != "Darwin" ]]; then
 fi
 
 # Check for Homebrew
-echo -e "${BLUE}[Step 1/6] Checking Homebrew...${NC}"
+echo -e "${BLUE}[Step 1/7] Checking Homebrew...${NC}"
 if ! command -v brew &> /dev/null; then
     echo "Installing Homebrew..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
@@ -103,7 +103,7 @@ echo -e "${GREEN}✓${NC} Homebrew installed"
 
 # Check for Claude Code
 echo ""
-echo -e "${BLUE}[Step 2/6] Checking Claude Code...${NC}"
+echo -e "${BLUE}[Step 2/7] Checking Claude Code...${NC}"
 
 # Check if Claude Code is already installed (cask or directory exists)
 CLAUDE_INSTALLED=false
@@ -127,7 +127,7 @@ echo -e "${GREEN}✓${NC} Claude Code ready"
 
 # Check/Install gcloud CLI
 echo ""
-echo -e "${BLUE}[Step 3/6] Checking Google Cloud CLI...${NC}"
+echo -e "${BLUE}[Step 3/7] Checking Google Cloud CLI...${NC}"
 
 # Check multiple locations for gcloud
 GCLOUD_FOUND=false
@@ -183,13 +183,69 @@ else
     echo "  Then run: gcloud auth application-default login"
 fi
 
+# Check/Install Salesforce CLI
+echo ""
+echo -e "${BLUE}[Step 4/7] Checking Salesforce CLI...${NC}"
+
+SF_INSTALLED=false
+if command -v sf &> /dev/null; then
+    SF_VERSION=$(sf --version 2>/dev/null | head -1 || echo "unknown")
+    echo -e "${GREEN}✓${NC} Salesforce CLI installed: $SF_VERSION"
+    SF_INSTALLED=true
+else
+    echo "Installing Salesforce CLI..."
+    brew install sf || {
+        echo -e "${YELLOW}⚠${NC} Could not install Salesforce CLI via Homebrew"
+        echo "  You may need to install it manually: npm install -g @salesforce/cli"
+    }
+
+    if command -v sf &> /dev/null; then
+        SF_VERSION=$(sf --version 2>/dev/null | head -1 || echo "unknown")
+        echo -e "${GREEN}✓${NC} Salesforce CLI installed: $SF_VERSION"
+        SF_INSTALLED=true
+    else
+        echo -e "${YELLOW}⚠${NC} sf not found in PATH. You may need to restart your terminal."
+    fi
+fi
+
+# Salesforce Authentication (databricks.com org)
+if [[ "$SF_INSTALLED" == "true" ]]; then
+    echo ""
+    echo "Checking Salesforce authentication..."
+
+    # Check if already authenticated to databricks org
+    if sf org list 2>/dev/null | grep -q "databricks"; then
+        CURRENT_ORG=$(sf org list --json 2>/dev/null | python3 -c "import sys,json; orgs=json.load(sys.stdin).get('result',{}).get('nonScratchOrgs',[]); print(next((o.get('username','') for o in orgs if 'databricks' in o.get('instanceUrl','')), 'unknown'))" 2>/dev/null || echo "unknown")
+        echo -e "${GREEN}✓${NC} Already authenticated to Salesforce: $CURRENT_ORG"
+    else
+        if [[ "$SKIP_GOOGLE_AUTH" != "true" ]]; then
+            echo "Opening browser for Salesforce authentication..."
+            echo "Please sign in with your Databricks Salesforce account."
+            echo ""
+
+            sf org login web --instance-url https://databricks.my.salesforce.com --alias databricks 2>/dev/null || {
+                echo -e "${YELLOW}⚠${NC} Salesforce authentication skipped or failed."
+                echo "  You can authenticate later with: sf org login web --instance-url https://databricks.my.salesforce.com --alias databricks"
+            }
+
+            # Verify authentication
+            if sf org list 2>/dev/null | grep -q "databricks"; then
+                echo -e "${GREEN}✓${NC} Salesforce authentication successful"
+            fi
+        else
+            echo -e "${YELLOW}⚠${NC} Skipping Salesforce authentication (--skip-google-auth)"
+            echo "  Authenticate later with: sf org login web --instance-url https://databricks.my.salesforce.com --alias databricks"
+        fi
+    fi
+fi
+
 # Create directories
 mkdir -p "$PLUGIN_CACHE"
 mkdir -p "$HOME/.claude/settings"
 
 # Download and install plugins
 echo ""
-echo -e "${BLUE}[Step 4/6] Installing FE Vibe plugins...${NC}"
+echo -e "${BLUE}[Step 5/7] Installing FE Vibe plugins...${NC}"
 
 TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
@@ -324,7 +380,7 @@ rm -rf "$TEMP_DIR"
 
 # Google Authentication
 echo ""
-echo -e "${BLUE}[Step 5/6] Google Authentication...${NC}"
+echo -e "${BLUE}[Step 6/7] Google Authentication...${NC}"
 
 if [[ "$SKIP_GOOGLE_AUTH" == "true" ]]; then
     echo -e "${YELLOW}⚠${NC} Skipping Google authentication (--skip-google-auth)"
@@ -358,7 +414,7 @@ fi
 
 # Verify GCP Access
 echo ""
-echo -e "${BLUE}[Step 6/6] Verifying GCP Access...${NC}"
+echo -e "${BLUE}[Step 7/7] Verifying GCP Access...${NC}"
 
 if [[ -z "$GCLOUD_PATH" ]] || ! $GCLOUD_PATH auth application-default print-access-token &> /dev/null; then
     echo -e "${YELLOW}⚠${NC} Cannot verify GCP access (not authenticated)"
@@ -422,9 +478,8 @@ echo "GCP Quota Project: $GCP_PROJECT"
 echo ""
 echo -e "${YELLOW}Next steps:${NC}"
 echo "  1. Restart Claude Code to load plugins"
-echo "  2. Use skills like: /gmail, /google-docs, /databricks-query"
+echo "  2. Use skills like: /gmail, /google-docs, /salesforce-actions, /databricks-query"
 echo ""
-echo "For other authentications (run inside Claude Code):"
+echo "For Databricks authentication (run inside Claude Code):"
 echo "  /databricks-authentication"
-echo "  /salesforce-authentication"
 echo ""

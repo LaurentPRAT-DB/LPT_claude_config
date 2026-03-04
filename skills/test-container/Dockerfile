@@ -3,7 +3,7 @@ FROM ubuntu:22.04
 # Avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install required tools
+# Install required tools (simulating a fresh laptop)
 RUN apt-get update && apt-get install -y \
     curl \
     git \
@@ -12,12 +12,15 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Create test directory
-WORKDIR /test
+# Create test user (simulates colleague's fresh environment)
+RUN useradd -m -s /bin/bash colleague
+USER colleague
+ENV HOME=/home/colleague
+WORKDIR /home/colleague
 
 # Copy test script
-COPY test-install.sh /test/test-install.sh
-RUN chmod +x /test/test-install.sh
+COPY --chown=colleague:colleague test-full-install.sh /home/colleague/
+RUN chmod +x /home/colleague/test-full-install.sh
 
 # Default command
-CMD ["/test/test-install.sh"]
+CMD ["/home/colleague/test-full-install.sh"]
