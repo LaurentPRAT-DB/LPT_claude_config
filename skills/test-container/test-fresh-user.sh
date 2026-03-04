@@ -160,9 +160,10 @@ for g in sorted(groups):
 
     if [[ -n "$GROUPS" ]]; then
         echo "Project has access via these groups:"
-        echo "$GROUPS" | while read -r group; do
-            echo "  - $group"
-        done
+        # Use here-string to avoid subshell issues with pipe
+        while IFS= read -r group; do
+            [[ -n "$group" ]] && echo "  - $group"
+        done <<< "$GROUPS"
         echo ""
         echo -e "${YELLOW}Note:${NC} Check if $CHECK_EMAIL is a member of any of these groups."
         echo "  (Databricks employees typically have inherited access via organization)"
