@@ -104,19 +104,50 @@ echo -e "${GREEN}✓${NC} Homebrew installed"
 # Check for Claude Code
 echo ""
 echo -e "${BLUE}[Step 2/6] Checking Claude Code...${NC}"
-if [[ ! -d "$HOME/.claude" ]]; then
-    echo "Installing Claude Code..."
-    brew install --cask claude-code
-    mkdir -p "$HOME/.claude"
+
+# Check if Claude Code is already installed (cask or directory exists)
+CLAUDE_INSTALLED=false
+if brew list --cask claude-code &>/dev/null 2>&1; then
+    CLAUDE_INSTALLED=true
+elif [[ -d "/Applications/Claude Code.app" ]] || [[ -d "$HOME/Applications/Claude Code.app" ]]; then
+    CLAUDE_INSTALLED=true
 fi
-echo -e "${GREEN}✓${NC} Claude Code installed"
+
+if [[ "$CLAUDE_INSTALLED" == "false" ]]; then
+    echo "Installing Claude Code..."
+    brew install --cask claude-code || {
+        echo -e "${YELLOW}⚠${NC} Could not install Claude Code via Homebrew"
+        echo "  You may need to install it manually or run with appropriate permissions"
+    }
+fi
+
+# Always ensure .claude directory exists
+mkdir -p "$HOME/.claude"
+echo -e "${GREEN}✓${NC} Claude Code ready"
 
 # Check/Install gcloud CLI
 echo ""
 echo -e "${BLUE}[Step 3/6] Checking Google Cloud CLI...${NC}"
-if ! command -v gcloud &> /dev/null; then
+
+# Check multiple locations for gcloud
+GCLOUD_FOUND=false
+if command -v gcloud &> /dev/null; then
+    GCLOUD_FOUND=true
+else
+    for path in "/opt/homebrew/bin/gcloud" "/usr/local/bin/gcloud" "$HOME/google-cloud-sdk/bin/gcloud"; do
+        if [[ -f "$path" ]]; then
+            GCLOUD_FOUND=true
+            break
+        fi
+    done
+fi
+
+if [[ "$GCLOUD_FOUND" == "false" ]]; then
     echo "Installing Google Cloud CLI..."
-    brew install --cask google-cloud-sdk
+    brew install --cask google-cloud-sdk || {
+        echo -e "${YELLOW}⚠${NC} Could not install gcloud via Homebrew"
+        echo "  You may need to install it manually: https://cloud.google.com/sdk/docs/install"
+    }
 
     # Source gcloud completion and path
     if [[ -f "$(brew --prefix)/share/google-cloud-sdk/path.bash.inc" ]]; then
