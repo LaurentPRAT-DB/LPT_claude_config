@@ -79,6 +79,9 @@ done
 # Check Email Mode (no sudo required)
 # ============================================
 if [[ -n "$CHECK_EMAIL" ]]; then
+    # Disable exit on error for this section (some commands may fail gracefully)
+    set +e
+
     echo -e "${BLUE}================================================${NC}"
     echo -e "${BLUE}  GCP Access Check for: $CHECK_EMAIL${NC}"
     echo -e "${BLUE}================================================${NC}"
