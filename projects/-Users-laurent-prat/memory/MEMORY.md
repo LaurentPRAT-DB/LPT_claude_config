@@ -97,6 +97,18 @@ See detailed guide: [installation-patterns.md](./installation-patterns.md)
 
 ## Custom Skills
 
+### superpowers-practices
+Software engineering best practices from [obra/superpowers](https://github.com/obra/superpowers).
+- **Location:** `~/.claude/skills/superpowers-practices.md`
+
+**Key practices:**
+| Practice | Iron Law |
+|----------|----------|
+| TDD | No code without failing test first. Wrote code first? Delete it. |
+| Debugging | 4-phase root cause. 3+ fixes failed? Question architecture. |
+| Design-first | No implementation until design approved |
+| Verification | No claims without fresh evidence |
+
 ### medium-article-from-git-repo
 Create professional Medium articles from GitHub repositories with diagrams.
 - **Location:** `~/.claude/skills/medium-article-from-git-repo.md`
