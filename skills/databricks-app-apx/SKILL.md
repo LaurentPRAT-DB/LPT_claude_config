@@ -200,10 +200,19 @@ mcp__apx__get_frontend_url
 
 ### Deploy to Databricks
 
-**CRITICAL**: Build frontend before deploying!
+**CRITICAL: When to Rebuild**
 
+| Change Type | Rebuild Required |
+|-------------|-----------------|
+| Frontend code (`.tsx`, `.ts`, `.css`) | `npm run build` in ui/ |
+| Backend code (`.py`) | No build needed (Python) |
+| `app.yaml` environment variables | Redeploy required |
+| `package.json` dependencies | `npm install && npm run build` |
+| `pyproject.toml` dependencies | Redeploy (picks up on restart) |
+
+**Always rebuild frontend after UI changes:**
 ```bash
-# 1. Build frontend (REQUIRED!)
+# 1. Build frontend (REQUIRED for .tsx/.ts/.css changes!)
 cd {app_name}/ui
 npm run build
 cd ../..
@@ -214,6 +223,15 @@ databricks bundle deploy -t dev
 # 3. Restart app to pick up changes
 databricks apps stop {app-name}
 databricks apps start {app-name}
+```
+
+**Backend-only changes** (Python files): No build step needed, but still requires redeploy:
+```bash
+# Deploy bundle (uploads Python files)
+databricks bundle deploy -t dev
+
+# Redeploy app to pick up Python changes
+databricks apps deploy {app-name} --source-code-path {path}
 ```
 
 **See [databricks-deployment.md](databricks-deployment.md)** for:
@@ -351,6 +369,7 @@ MCP_TOOLS = [
 - **[automated-testing.md](automated-testing.md)** - Automated UI testing with Chrome DevTools MCP and Puppeteer
 - **[production-testing.md](production-testing.md)** - Load testing, performance optimization, cache strategies, benchmarks
 - **[health-patterns.md](health-patterns.md)** - Comprehensive health check endpoints, readiness probes, production monitoring
+- **[performance-optimization.md](performance-optimization.md)** - Response caching, TanStack Query presets, IndexedDB persistence, Delta cache tables, virtualization
 
 Read these files only when actively writing that type of code or debugging issues.
 

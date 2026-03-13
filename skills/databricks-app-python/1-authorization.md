@@ -202,6 +202,20 @@ The `gap-auth` response header contains the authenticated user's email:
 user_email = response.headers.get("gap-auth")
 ```
 
+### 6. System Tables result_state Values Differ from Jobs API
+
+**Problem**: System tables use different status values than Jobs API.
+
+```python
+# Jobs API response
+job_run.state.result_state == "SUCCESS"
+
+# System tables (job_run_timeline)
+result_state == "SUCCEEDED"  # NOT "SUCCESS"
+```
+
+**System table values**: `SUCCEEDED`, `FAILED`, `TIMED_OUT`, `SKIPPED`, `CANCELLED`, `ERROR`
+
 ---
 
 ## Best Practices

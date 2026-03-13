@@ -2,6 +2,18 @@
 
 Standard template for U5 (Onboarding) stage Use Case documentation.
 
+**Last Verified:** March 8, 2026 (Mercuria UC-1 Phase 3, SITA UC21 AOP Athens)
+
+## Expected Formatting Counts (Verified)
+
+| Element | Count | Description |
+|---------|-------|-------------|
+| TITLE | 1 | "Onboarding Plan: {UCO_NAME}" |
+| HEADING_1 | 7 | USE CASE OVERVIEW, OBJECTIVE, ONBOARDING MILESTONES, KEY CONTACTS, SUCCESS CRITERIA, RISKS & MITIGATIONS, NOTES |
+| HEADING_2 | 3 | Phase 1, Phase 2, Phase 3 |
+| Bullets | 15 | 4+4+4 in milestones, 3 in success criteria |
+| Bold labels | ~12 | Account:, UCO Name:, Stage:, etc. |
+
 ## Document Structure
 
 The onboarding doc uses proper Google Docs formatting:
@@ -388,13 +400,34 @@ The "Associate Documents" modal requires **manual entry through the UI**:
 ## Checklist for New U5 Onboarding Docs
 
 1. [ ] Query U5 UCO details from Salesforce
-2. [ ] Create Google Doc with plain text content
-3. [ ] Apply formatting (title, headings, bullets, bold)
+2. [ ] Create Google Doc with plain text content (use `generate_onboarding_content()`)
+3. [ ] Apply formatting with `format_onboarding_doc(doc_id)` - applies TITLE, HEADING_1, HEADING_2, bullets, bold
 4. [ ] Share doc with databricks.com domain as VIEWER
 5. [ ] Verify doc ownership is laurent.prat@databricks.com
 6. [ ] **API**: Set `Artifact_Link__c` field (clickable link in MEDDPICC section)
-7. [ ] **Optional**: Append link to `Use_Case_Description__c` for copy-paste access
+7. [ ] **Verify formatting** with count check (expect: 1 TITLE, 7 HEADING_1, 3 HEADING_2, 15 bullets, ~12 bold)
 8. [ ] **MANUAL**: Open UCO → Associate Documents → paste URL in "Onboarding Doc" → Save
+
+### Verification Command (Python)
+```python
+def verify_formatting(doc_id):
+    doc = get_document(doc_id)
+    styles = {"TITLE": 0, "HEADING_1": 0, "HEADING_2": 0}
+    bullets = 0
+    bold_count = 0
+    for element in doc.get('body', {}).get('content', []):
+        if 'paragraph' in element:
+            para = element['paragraph']
+            style = para.get('paragraphStyle', {}).get('namedStyleType', 'NORMAL_TEXT')
+            if style in styles:
+                styles[style] += 1
+            if para.get('bullet'):
+                bullets += 1
+            for text_elem in para.get('elements', []):
+                if text_elem.get('textRun', {}).get('textStyle', {}).get('bold'):
+                    bold_count += 1
+    print(f"TITLE: {styles['TITLE']}, HEADING_1: {styles['HEADING_1']}, HEADING_2: {styles['HEADING_2']}, Bullets: {bullets}, Bold: {bold_count}")
+```
 
 ---
 

@@ -54,6 +54,8 @@ See detailed patterns: [uco-next-steps-patterns.md](./uco-next-steps-patterns.md
 ## UCO Onboarding Documentation
 - **U5 UCOs require onboarding docs** - Template: [uco-onboarding-template.md](./uco-onboarding-template.md)
 - Docs must be owned by laurent.prat@databricks.com and shared with databricks.com domain as VIEWER
+- **Verified Mar 8, 2026**: Template includes `format_onboarding_doc()` for TITLE/HEADING_1/HEADING_2/bullets/bold
+- **Expected counts**: 1 TITLE, 7 HEADING_1, 3 HEADING_2, 15 bullets, ~12 bold labels
 
 ### Key Field Mappings (MEDDPICC Section)
 | UI Label | API Field | Clickable? |
@@ -108,6 +110,15 @@ Software engineering best practices from [obra/superpowers](https://github.com/o
 | Debugging | 4-phase root cause. 3+ fixes failed? Question architecture. |
 | Design-first | No implementation until design approved |
 | Verification | No claims without fresh evidence |
+
+### account-management-summary
+Generate comprehensive Customer Intelligence Brief for any account by scanning Salesforce, Gmail, Google Drive.
+- **Location:** `~/.claude/skills/account-management-summary.md`
+- **Invoke:** `/account-management-summary [Account Name]`
+- **Sources:** Salesforce (account, opps, UCOs, contacts, events, tasks), Gmail (24 months), Google Drive
+- **Output:** Formatted Google Doc with exec summary, stakeholder map, timeline, risks, growth strategy
+- **Parallelization:** Uses Agent subagents to scan Gmail/Drive in parallel after Salesforce discovery
+- **First used:** MSC Cargo (Mar 2026) - produced [Customer Intelligence Brief](https://docs.google.com/document/d/1duoGkqT9wX7PB8AtbM1NQJnnIgSs-K9Laqw9YJHlX5g/edit)
 
 ### medium-article-from-git-repo
 Create professional Medium articles from GitHub repositories with diagrams.

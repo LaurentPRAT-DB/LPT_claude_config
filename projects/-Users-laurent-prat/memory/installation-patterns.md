@@ -97,3 +97,55 @@ Or via CLI:
 ```bash
 sf data query --query "SELECT Id, Name, Email FROM User WHERE Email = 'your.email@databricks.com'" --json
 ```
+
+## Syncing Skills from ai-dev-kit Repository
+
+**Source:** https://github.com/databricks-solutions/ai-dev-kit
+
+### Update Workflow
+```bash
+# 1. Clone repo
+gh repo clone databricks-solutions/ai-dev-kit /tmp/ai-dev-kit -- --depth 1
+
+# 2. Find MISSING skills
+AI_DEV_KIT="/tmp/ai-dev-kit/databricks-skills"
+GLOBAL_SKILLS="$HOME/.claude/skills"
+
+for skill in $(ls $AI_DEV_KIT); do
+  if [[ -d "$AI_DEV_KIT/$skill" ]] && [[ ! -d "$GLOBAL_SKILLS/$skill" ]]; then
+    echo "Missing: $skill"
+  fi
+done
+
+# 3. Compare CONFLICTING skills (line count comparison)
+for skill in $(ls $AI_DEV_KIT); do
+  if [[ -d "$AI_DEV_KIT/$skill" ]] && [[ -d "$GLOBAL_SKILLS/$skill" ]]; then
+    ai_lines=$(find "$AI_DEV_KIT/$skill" -name "*.md" -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}')
+    global_lines=$(find "$GLOBAL_SKILLS/$skill" -name "*.md" -exec wc -l {} + 2>/dev/null | tail -1 | awk '{print $1}')
+    echo "$skill: ai-dev-kit=$ai_lines, global=$global_lines"
+  fi
+done
+
+# 4. Install missing skills
+cp -r "$AI_DEV_KIT/<skill-name>" "$GLOBAL_SKILLS/"
+
+# 5. Cleanup
+rm -rf /tmp/ai-dev-kit
+```
+
+### Naming Differences (ai-dev-kit → global)
+| ai-dev-kit name | Global name |
+|-----------------|-------------|
+| databricks-lakebase-autoscale | lakebase-autoscale |
+| databricks-lakebase-provisioned | lakebase-provisioned |
+| databricks-mlflow-evaluation | mlflow-evaluation |
+| databricks-spark-declarative-pipelines | spark-declarative-pipelines |
+| databricks-spark-structured-streaming | spark-structured-streaming |
+| databricks-synthetic-data-gen | synthetic-data-generation |
+| databricks-unstructured-pdf-generation | unstructured-pdf-generation |
+
+### Decision Rules
+1. **Missing skills** → Install from ai-dev-kit
+2. **Identical line counts** → Keep current (no change needed)
+3. **ai-dev-kit has more lines** → Update from ai-dev-kit (newer/more complete)
+4. **Global has more lines** → Keep current (may have custom additions)

@@ -198,6 +198,49 @@ async def get_data(request: Request):
 - Databricks SQL connector is synchronous — use `asyncio.to_thread()` for async endpoints
 - Good choice for API backends that serve APX (FastAPI + React) apps
 
+**Performance patterns**:
+
+```python
+from fastapi import FastAPI
+from fastapi.middleware.gzip import GZipMiddleware
+import httpx
+
+app = FastAPI()
+
+# 1. GZip compression for large responses
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
+# 2. HTTP client with timeouts for external APIs
+http_client = httpx.Client(timeout=30.0)
+
+# 3. Selective query optimization - only run expensive queries when needed
+@app.get("/api/alerts")
+async def get_alerts(category: str | None = None):
+    results = {}
+    # Only run queries for requested categories
+    if category is None or category == "failure":
+        results["failure"] = await query_failure_alerts()
+    if category is None or category == "sla":
+        results["sla"] = await query_sla_alerts()
+    return results
+
+# 4. Per-router dependency injection for OBO auth
+from fastapi import Depends
+from databricks.sdk import WorkspaceClient
+
+def get_ws_prefer_user(request: Request):
+    """Use user token for OBO, fallback to service principal."""
+    user_token = request.headers.get("x-forwarded-access-token")
+    if user_token:
+        return WorkspaceClient(token=user_token, host=os.environ["DATABRICKS_HOST"])
+    return WorkspaceClient()  # Falls back to SP
+
+@app.get("/api/system-tables")
+async def get_system_data(ws: WorkspaceClient = Depends(get_ws_prefer_user)):
+    # Uses user's permissions to query system tables
+    return ws.statement_execution.execute_statement(...)
+```
+
 **Cookbook**: [apps-cookbook.dev/docs/category/fastapi](https://apps-cookbook.dev/docs/category/fastapi) — getting started, endpoint examples.
 
 ---

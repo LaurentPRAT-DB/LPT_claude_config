@@ -374,3 +374,200 @@ const handleCreate = async (data: EntityIn) => {
   }
 };
 ```
+
+## Performance Patterns
+
+### TanStack Query Cache Presets
+
+Define cache presets for different data freshness requirements:
+
+```typescript
+// lib/query-config.ts
+export const queryPresets = {
+  // Live data - aggressive refresh (running jobs, active status)
+  live: {
+    staleTime: 10 * 1000,      // 10 seconds
+    gcTime: 60 * 1000,         // 1 minute
+    refetchOnWindowFocus: true,
+  },
+  // Semi-live - moderate refresh (dashboards, summaries)
+  semiLive: {
+    staleTime: 60 * 1000,      // 1 minute
+    gcTime: 5 * 60 * 1000,     // 5 minutes
+    refetchOnWindowFocus: true,
+  },
+  // Slow - infrequent refresh (alerts, costs - expensive queries)
+  slow: {
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    gcTime: 30 * 60 * 1000,    // 30 minutes
+    refetchOnWindowFocus: false,
+  },
+  // Static - rarely changes (user info, presets)
+  static: {
+    staleTime: Infinity,
+    gcTime: 60 * 60 * 1000,    // 1 hour
+    refetchOnWindowFocus: false,
+  },
+};
+
+// Query keys factory for cache sharing
+export const queryKeys = {
+  alerts: {
+    all: ['alerts'] as const,
+    byJob: (jobId: string) => ['alerts', 'job', jobId] as const,
+  },
+  jobs: {
+    active: ['jobs', 'active'] as const,
+    health: (workspace?: string) => ['health-metrics', workspace] as const,
+  },
+};
+
+// Usage
+const { data } = useQuery({
+  queryKey: queryKeys.alerts.all,
+  queryFn: () => fetchAlerts(),
+  ...queryPresets.slow,
+  refetchInterval: 60000, // Background refresh
+});
+```
+
+### Table Virtualization for Large Datasets
+
+Use @tanstack/react-virtual when rendering 100+ rows:
+
+```typescript
+import { useVirtualizer } from '@tanstack/react-virtual';
+
+const VIRTUALIZATION_THRESHOLD = 100;
+const ROW_HEIGHT = 56;
+
+function VirtualizedTable({ items }: { items: Item[] }) {
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const useVirtualization = items.length >= VIRTUALIZATION_THRESHOLD;
+
+  const rowVirtualizer = useVirtualizer({
+    count: useVirtualization ? items.length : 0,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10, // Render 10 extra rows above/below
+  });
+
+  if (!useVirtualization) {
+    // Standard table for small datasets
+    return <StandardTable items={items} />;
+  }
+
+  return (
+    <div ref={tableContainerRef} style={{ maxHeight: '600px', overflow: 'auto' }}>
+      <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+        <Table>
+          <TableBody>
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const item = items[virtualRow.index];
+              return (
+                <TableRow
+                  key={item.id}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <ItemRow item={item} />
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+```
+
+### Route Prefetching with TanStack Router
+
+Prefetch adjacent page data during navigation:
+
+```typescript
+// routeTree.gen.tsx
+import { QueryClient } from '@tanstack/react-query';
+
+let queryClientRef: QueryClient | null = null;
+export const setQueryClient = (qc: QueryClient) => { queryClientRef = qc };
+
+const prefetchAdjacentPages = async (currentPath: string) => {
+  if (!queryClientRef) return;
+
+  const adjacentPaths: Record<string, string[]> = {
+    '/dashboard': ['/jobs', '/alerts'],
+    '/jobs': ['/dashboard', '/alerts'],
+    '/alerts': ['/jobs', '/historical'],
+  };
+
+  const adjacent = adjacentPaths[currentPath] || [];
+
+  if (adjacent.includes('/jobs')) {
+    queryClientRef.prefetchQuery({
+      queryKey: ['jobs', 'active'],
+      queryFn: async () => {
+        const res = await fetch('/api/jobs/active');
+        return res.json();
+      },
+      ...queryPresets.semiLive,
+    });
+  }
+};
+
+// In route definition
+const dashboardRoute = createRoute({
+  getParentRoute: () => sidebarRoute,
+  path: '/dashboard',
+  component: Dashboard,
+  loader: () => prefetchAdjacentPages('/dashboard'),
+});
+
+// In main.tsx - set queryClient reference
+setQueryClient(queryClient);
+```
+
+### Cache Sharing Between Components
+
+Share expensive queries across components to avoid N+1 queries:
+
+```typescript
+// Bad: Each row fetches its own alerts
+function JobRow({ job }) {
+  const { data: alerts } = useQuery({
+    queryKey: ['alerts', job.id],  // ❌ N queries for N rows
+    queryFn: () => fetchAlertsForJob(job.id),
+  });
+}
+
+// Good: Fetch all alerts once, filter in component
+function JobHealthTable({ jobs }) {
+  // Fetch ALL alerts once at table level
+  const { data: alertsData } = useQuery({
+    queryKey: queryKeys.alerts.all,  // ✅ Single query, shared cache
+    queryFn: () => fetchAlerts(),
+    ...queryPresets.slow,
+  });
+
+  const allAlerts = alertsData?.alerts ?? [];
+
+  return (
+    <Table>
+      {jobs.map((job) => (
+        <JobRow
+          key={job.id}
+          job={job}
+          alerts={allAlerts.filter(a => a.job_id === job.id)}
+        />
+      ))}
+    </Table>
+  );
+}
+```
