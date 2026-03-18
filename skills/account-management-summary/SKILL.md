@@ -816,23 +816,24 @@ Generate a Google Slides territory review deck from the FY27 CHATEE template, po
 
 **If running Phase 12 standalone** (user said "just the slides"/"just the deck"/"just do phase 12"): Search Google Drive for the existing Intelligence Brief document (`fullText contains 'ACCOUNT_NAME' and fullText contains 'Intelligence Brief'`), read its content, and use that as the data source instead of running Phases 0-5.
 
-**Template ID**: `1U2xTfGLOry-VL8HWJuAi7BnUWRps4kQE4fB859KOvUo` (38 slides, 5 account sections)
+**Template ID**: `1U2xTfGLOry-VL8HWJuAi7BnUWRps4kQE4fB859KOvUo` (40 slides, 5 account sections + title)
 **Rule**: NEVER modify the template — always copy it first.
 **gslides_builder.py location**: `~/.claude/plugins/cache/fe-vibe/fe-google-tools/1.1.0/skills/google-slides-creator/resources/gslides_builder.py`
 
 **Step 12.1 - Copy the template**
 
 ```bash
-python3 ~/.claude/plugins/cache/fe-vibe/fe-google-tools/1.1.0/skills/google-slides-creator/resources/gslides_builder.py copy-presentation \
+python3 ~/.claude/plugins/cache/fe-vibe/fe-google-tools/1.1.0/skills/google-slides-creator/resources/gslides_builder.py copy \
   --pres-id "1U2xTfGLOry-VL8HWJuAi7BnUWRps4kQE4fB859KOvUo" \
   --title "FY27 Territory Review - ACCOUNT_NAME"
 ```
+**Note**: The CLI command is `copy` (not `copy-presentation`).
 
 Save the returned presentation ID as `NEW_PRES_ID`.
 
 **Step 12.2 - Delete extra account sections (keep only slides 0-9)**
 
-The template has 38 slides: title (1) + 5 account sections. Keep only the title slide and first account section (10 slides). Delete all slides after index 9.
+The template has 40 slides: title (1) + divider + 5 account sections (each ~8 slides). Keep only the title slide and first account section (10 slides total, indices 0-9). Delete all slides after index 9.
 
 ```bash
 # Get all slide IDs from the copy
@@ -860,7 +861,7 @@ After deletion, verify 10 slides remain: `gs.get_slide_ids("NEW_PRES_ID")`
 Use `replace_all_text()` to replace the template title:
 
 ```bash
-python3 .../gslides_builder.py replace-all-text \
+python3 .../gslides_builder.py replace-text \
   --pres-id "NEW_PRES_ID" \
   --find "FY27 CHATEE" \
   --replace "FY27 Territory Review - ACCOUNT_NAME" \
@@ -872,7 +873,7 @@ python3 .../gslides_builder.py replace-all-text \
 The divider slide contains the SA name (default: "Laurie"). Replace with the account's SA:
 
 ```bash
-python3 .../gslides_builder.py replace-all-text \
+python3 .../gslides_builder.py replace-text \
   --pres-id "NEW_PRES_ID" \
   --find "Laurie" \
   --replace "SA_FULL_NAME" \
@@ -964,58 +965,99 @@ for slide in pres['slides'][5:10]:  # slides 6-10 (indices 5-9)
             print(f"  Table {elem['objectId']}: {rows}x{cols}")
 ```
 
-**Cell clear + fill pattern** (for tables with existing content):
+**CRITICAL: Table cell text replacement — use `replaceAllText` with `pageObjectIds`**
+
+`deleteText` with `cellLocation` does NOT work for table cells — the Slides API returns "object has no text" even when cells contain text. Instead, use `replaceAllText` scoped to the specific slide page:
 
 ```python
+# Step 1: Get the page objectId for the slide containing the table
+pres = gs.get_presentation("NEW_PRES_ID")
+page_id = pres['slides'][SLIDE_INDEX]['objectId']
+
+# Step 2: Replace old values with new values, scoped to that page
+token = gs.get_access_token()
+url = f"https://slides.googleapis.com/v1/presentations/{PRES_ID}:batchUpdate"
+
 requests = []
-for row_idx, row_data in enumerate(table_data):
-    for col_idx, cell_value in enumerate(row_data):
-        # 1. Delete existing text
-        requests.append({
-            "deleteText": {
-                "objectId": table_id,
-                "cellLocation": {"rowIndex": row_idx, "columnIndex": col_idx},
-                "textRange": {"type": "ALL"}
-            }
-        })
-        # 2. Insert new text (skip empty cells)
-        if cell_value:
-            requests.append({
-                "insertText": {
-                    "objectId": table_id,
-                    "cellLocation": {"rowIndex": row_idx, "columnIndex": col_idx},
-                    "text": str(cell_value),
-                    "insertionIndex": 0
-                }
-            })
+for old_text, new_text in replacements:
+    requests.append({
+        "replaceAllText": {
+            "containsText": {"text": old_text, "matchCase": True},
+            "replaceText": new_text,
+            "pageObjectIds": [page_id]
+        }
+    })
+
+# Execute via direct API call (gs.batch_update silently swallows errors)
+import json, urllib.request
+data = json.dumps({"requests": requests}).encode('utf-8')
+req = urllib.request.Request(url, data=data, method='POST')
+req.add_header("Authorization", f"Bearer {token}")
+req.add_header("Content-Type", "application/json")
+req.add_header("x-goog-user-project", "gcp-sandbox-field-eng")
+with urllib.request.urlopen(req) as resp:
+    result = json.loads(resp.read())
+    for r in result.get('replies', []):
+        print(r.get('replaceAllText', {}).get('occurrencesChanged', 0))
+```
+
+**WARNINGS for `replaceAllText` on tables:**
+- **Cascade risk**: Short strings like "7%" will also match inside "+67%". Replace longer/more-unique strings first, or use values that won't appear as substrings of other values.
+- **Page scope is required**: Without `pageObjectIds`, replacements apply to ALL slides and may corrupt other content.
+- **Verify after replacement**: Always re-read the table cells via `get_presentation()` to confirm values are correct.
+- **For empty cells**: Use `insertText` with `cellLocation` (this DOES work for inserting into empty cells).
+
+**Merged cells (row/column spans)**:
+Template tables often have merged cells. When discovering table structure:
+```python
+for r_idx, row in enumerate(table['tableRows']):
+    if 'tableCells' not in row:
+        print(f"  Row {r_idx}: MERGED (no tableCells) — skip this row")
+        continue
+    for c_idx, cell in enumerate(row['tableCells']):
+        rspan = cell.get('rowSpan', 1)
+        cspan = cell.get('columnSpan', 1)
+        # Only target the parent cell (the one that owns the span)
+        # Merged-away rows/cols don't have tableCells entries
+```
+
+**Shape text updates (non-table)** work with `deleteText`/`insertText` via `gs.batch_update`:
+```python
+requests = []
+for shape_id, new_text in shape_updates.items():
+    requests.append({"deleteText": {"objectId": shape_id, "textRange": {"type": "ALL"}}})
+    requests.append({"insertText": {"objectId": shape_id, "text": new_text, "insertionIndex": 0}})
 gs.batch_update("NEW_PRES_ID", requests)
 ```
 
-**Note**: `deleteText` on an already-empty cell may error. To be safe, first read cell content via `get_presentation()` and only issue `deleteText` for non-empty cells. Or wrap in try/except per batch.
-
-**Slide 6 - Consumption Forecast** (index 5):
-- Main table (2×11): Row 0 = headers (keep), Row 1 = quarterly consumption values
+**Slide 6 - Consumption Forecast** (index 6 — NOT index 5 which is Horizontal Priorities):
+- Main table (2×11): Row 0 = headers (keep), Row 1 = quarterly consumption values — **has column spans in header row**
 - Data source: Opportunity amounts aggregated by quarter, or Brief § Consumption Forecast
 - Best case table (1×3): Upside scenario
+- **Two narrative text boxes** (inside `elementGroup` children — use deep inspection to find shape IDs):
+  - **Left box: "FY27 Committed Number"** — structured with red subtitle prompts:
+    - **"How are you hitting the forecast?"** — bullet points on execution levers: active UC pipeline execution, champion protection, platform stickiness projects, key milestones
+    - **"Growth Risks (optimizations, competition, budget etc)"** — bullet points on risks: budget freezes, champion dependency, competitor lock-in, usage volatility, exec engagement gaps
+  - **Right box: "FY27 Best Case"** — structured with red subtitle prompts:
+    - **"How can you go beyond the forecast?"** — bullet points on upside scenarios: new commit triggers (e.g. cloud migration), product displacement (e.g. PowerBI → Genie), expansion plays, new use case categories
+    - **"What support would you need (Partner, Product etc)?"** — bullet points on asks: Product GA features needed, Partner activations, AWS/cloud funding, Exec sponsorship, specific tooling gaps
+  - **Discovery**: These shapes are nested inside `elementGroup` elements on the slide — use `elem['elementGroup']['children']` to find them. Each group has 2 children: one text shape + one empty decoration shape.
+  - **Content sourcing**: Map from Brief § Growth Strategy (near/medium/long term), Risks, Technology Landscape, and Key Stakeholders
 
-**Slide 7 - Use-Case Pipeline** (index 6):
-- Table (8×5): UCOs organized by go-live quarter
+**Slide 7 - Use-Case Pipeline** (index 7):
+- Table (8×5): UCOs organized by go-live quarter — **has row spans (3x1 and 2x1 merged cells)**
 - Data source: `UseCase__c` records from Salesforce Phase 1, grouped by `DatabricksGoLiveQrtr__c`
 - Include: UCO name, stage, estimated consumption, go-live quarter
 
-**Slide 8 - Priority Use Cases** (index 7):
+**Slide 8 - Priority Use Cases** (index 8):
 - Table (5×6): Top 5 UCOs with execution details
-- Columns: Use Case, Stage, Skills Needed, Execution Plan, Funding, Go-Live
-- Data source: Top UCOs by estimated consumption from Salesforce
+- Columns: Use Case, Skills/Resources, Enablement Plan, Execution Cadence, Events/Certifications, Executive Sponsor
+- Data source: Top UCOs by estimated consumption from Salesforce + intelligence brief
 
-**Slide 9 - Priority Commit Deals** (index 8):
+**Slide 9 - Priority Commit Deals** (index 9):
 - Table (5×6): Active opportunities with commit strategy
-- Columns: Opportunity, Amount, Close Date, Stage, Commit Strategy, Risk
+- Columns: Account/Expected Close, Success Requirements, Compelling Event, End-State Setup, Partner & Delivery, Leadership Ask
 - Data source: Open Opportunities from Salesforce Phase 1
-
-**Slide 10 - Acceleration Plan** (index 9):
-- Table (9×3): Strategic initiatives mapped to outcomes
-- Columns: Initiative, Expected Outcome, Dependencies/Timeline
 - Data source: Brief § Growth Strategy + Strategic Objectives
 
 **Step 12.7 - Share the presentation**
@@ -1041,18 +1083,18 @@ Display the URL to the user and include it in the summary output.
 
 **Data mapping summary**:
 
-| Slide | Element | Source |
-|---|---|---|
-| 1 (Title) | Title text | Account name |
-| 2 (Divider) | SA name | Account SA / user name |
-| 3 (Immediate Priorities) | Strategy shapes | Brief § Growth Strategy Near-Term + Stakeholders |
-| 4 (Long-Term Vision) | Grid shapes | Brief § Strategic Priorities + Growth Strategy Long-Term |
-| 5 (Horizontal Priorities) | Product shapes | Brief § Technology Landscape + Product adoption |
-| 6 (Consumption Forecast) | Tables | Opportunity amounts by quarter |
-| 7 (Use-Case Pipeline) | Table | UCOs grouped by go-live quarter |
-| 8 (Priority Use Cases) | Table | Top 5 UCOs with execution details |
-| 9 (Priority Deals) | Table | Active opportunities with commit strategy |
-| 10 (Acceleration Plan) | Table | Strategic objectives → initiatives |
+| Slide | Index | Element | Source |
+|---|---|---|---|
+| 1 (Title) | 0 | Title text | Account name |
+| 2 (Divider) | 1 | SA name | Account SA / user name |
+| 3 (Overall Strategy) | 2 | 3 strategy columns + 3 KPI boxes | Brief § Growth Strategy + key metrics |
+| 4 (Immediate Priorities) | 3 | Exec/LoB/Champions columns | Brief § Stakeholders + Growth Strategy Near-Term |
+| 5 (Long-Term Vision) | 4 | Grid: 3 priorities × (objectives, plans, outcomes) | Brief § Strategic Priorities + Growth Strategy Long-Term |
+| 6 (Horizontal Priorities) | 5 | Serverless/Lakebase/Genie shapes | Brief § Technology Landscape + Product adoption |
+| 7 (Consumption Forecast) | 6 | 2 tables + 2 narrative groups | Opportunity amounts by quarter |
+| 8 (UC Pipeline) | 7 | Table (8×5, merged rows) | UCOs grouped by go-live quarter |
+| 9 (Priority Use Cases) | 8 | Table (5×6) | Top UCOs with execution details |
+| 10 (Priority Deals) | 9 | Table (5×6) | Active opportunities with commit strategy |
 
 ## Parallelization Strategy
 
@@ -1130,3 +1172,13 @@ After agents complete, append their findings to the Google Doc using Docs API `b
 - **Contact name accents**: SOQL exact match fails for accented names (e.g., `René`). Use `LIKE '%LastName%'` pattern instead.
 - **Temp file collision**: Use account-specific filenames (`/tmp/account_brief_ACCOUNTNAME.md`) and clean up after Google Doc creation.
 - **markdown_tables_to_gdocs.py "no tables found"**: This is benign — `markdown_to_gdocs.py` often handles tables during initial creation.
+- **gslides_builder.py CLI commands**: Use `copy` (not `copy-presentation`), `replace-text` (not `replace-all-text`), `list-slides` (not `get-slide-ids`). Run `python3 gslides_builder.py -h` to see all valid commands.
+- **Table cell deleteText BROKEN**: `deleteText` with `cellLocation` returns "object has no text" — the Slides API does not support this for table cells. Use `replaceAllText` with `pageObjectIds` scope instead.
+- **replaceAllText cascade risk**: Short strings like "7%" will match inside "+67%". Always replace longer/more-unique strings first, or use exact values that won't appear as substrings.
+- **gs.batch_update silently swallows errors**: The function returns error responses as dicts without raising exceptions. Always check the returned dict for an `error` key, or use direct `urllib.request` API calls for critical operations.
+- **Template has 40 slides**: The FY27 CHATEE template has 40 slides (not 38). After copy, delete indices 10-39 to keep only the first account section (10 slides).
+- **Merged table cells**: Template tables have row spans and column spans. Merged-away rows lack `tableCells`. Always inspect table structure with `get_presentation()` before updating — check `rowSpan`/`columnSpan` on each cell and skip rows without `tableCells`.
+- **Slide index mapping (after deletion)**: 0=Title, 1=SA Divider, 2=Overall Strategy, 3=Immediate Priorities, 4=Long-Term Vision, 5=Horizontal Priorities, 6=Consumption Forecast, 7=UC Pipeline, 8=Priority Use Cases, 9=Priority Commit Deals.
+- **Shape text updates work fine**: `deleteText`/`insertText` with plain `objectId` (no `cellLocation`) works correctly for shapes, text boxes, and `elementGroup` children. Only table cells require the `replaceAllText` workaround.
+- **subprocess.run capture_output**: Do NOT combine `capture_output=True` with `stderr=subprocess.DEVNULL` — raises `ValueError`. Use `capture_output=True` alone (it captures both stdout and stderr).
+- **Sharing slides**: Use `google_auth.py token` for Drive permissions API (not `gcloud auth print-access-token`), and include `x-goog-user-project: gcp-sandbox-field-eng` header.

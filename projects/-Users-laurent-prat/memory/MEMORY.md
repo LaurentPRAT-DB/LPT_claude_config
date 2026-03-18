@@ -120,6 +120,17 @@ Generate comprehensive Customer Intelligence Brief for any account by scanning S
 - **Parallelization:** Uses Agent subagents to scan Gmail/Drive in parallel after Salesforce discovery
 - **First used:** MSC Cargo (Mar 2026) - produced [Customer Intelligence Brief](https://docs.google.com/document/d/1duoGkqT9wX7PB8AtbM1NQJnnIgSs-K9Laqw9YJHlX5g/edit)
 
+### customer-newsletter
+Generate personalized Databricks newsletters for customers combining Salesforce context with curated public content.
+- **Location:** `~/.claude/skills/customer-newsletter/SKILL.md`
+- **Invoke:** `/customer-newsletter <Account Name> [--to contact@email.com]`
+- **Sources:** Salesforce (account info, active UCOs), Web search (databricks.com/blog, docs, case studies)
+- **Output:** Professional HTML email as Gmail draft with 4-6 curated links (6-8 in domain mode)
+- **Design:** Databricks brand colors (#FF3621), inline CSS, mobile-friendly
+- **UTM tracking:** Links include `utm_source=sa_newsletter&utm_medium=email&utm_campaign=<account>`
+- **AE documentation:** [Google Doc](https://docs.google.com/document/d/1KuLpRvvhTNUgVq4GgXV375OjhGjrIFLukH08Y1XUqCU/edit?tab=t.0)
+- **`--domain` mode:** Focus newsletter on a specific domain topic with 6 content categories
+
 ### medium-article-from-git-repo
 Create professional Medium articles from GitHub repositories with diagrams.
 - **Location:** `~/.claude/skills/medium-article-from-git-repo.md`
